@@ -48,8 +48,11 @@ func suite(_ name: String, _ block: () -> Void) {
 // MARK: - Run all test suites
 
 suite("AugeErrorTests") { runAugeErrorTests() }
+suite("AugeErrorDeepTests") { runAugeErrorDeepTests() }
 suite("ImageSourceTests") { runImageSourceTests() }
+suite("ImageSourceDeepTests") { runImageSourceDeepTests() }
 suite("ResultFormatterTests") { runResultFormatterTests() }
+suite("ResultFormatterDeepTests") { runResultFormatterDeepTests() }
 suite("CLIParsingTests") { runCLIParsingTests() }
 
 // MARK: - Summary
