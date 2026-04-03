@@ -50,6 +50,7 @@ func suite(_ name: String, _ block: () -> Void) {
 suite("AugeErrorTests") { runAugeErrorTests() }
 suite("ImageSourceTests") { runImageSourceTests() }
 suite("ResultFormatterTests") { runResultFormatterTests() }
+suite("CLIParsingTests") { runCLIParsingTests() }
 
 // MARK: - Summary
 
