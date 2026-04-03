@@ -1,6 +1,6 @@
 # auge
 
-![Version 0.0.1](https://img.shields.io/badge/version-0.0.1-blue)
+![Version 0.0.2](https://img.shields.io/badge/version-0.0.2-blue)
 ![macOS 10.15+](https://img.shields.io/badge/macOS-10.15+-lightgrey)
 ![Swift 6.3](https://img.shields.io/badge/Swift-6.3-orange)
 ![100% on-device](https://img.shields.io/badge/privacy-100%25%20on--device-green)
