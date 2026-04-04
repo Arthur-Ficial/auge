@@ -1,0 +1,71 @@
+#!/bin/bash
+# diff-text — OCR two images and diff the extracted text
+#
+# Perfect for comparing screenshots before/after a change,
+# spotting differences in document versions, etc.
+#
+# Usage:
+#   diff-text <image1> <image2>       # show text diff
+#   diff-text -s <image1> <image2>    # side-by-side diff
+#   diff-text -c <image1> <image2>    # copy diff to clipboard
+#
+# Examples:
+#   diff-text before.png after.png
+#   diff-text old_receipt.jpg new_receipt.jpg -s
+#   diff-text v1.png v2.png | head -20
+#
+# Requires: auge
+
+set -euo pipefail
+
+copy=false
+side=false
+files=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--copy)      copy=true; shift ;;
+    -s|--side)      side=true; shift ;;
+    -h|--help)
+      sed -n '2,/^$/{ s/^# //; s/^#//; p; }' "$0"
+      exit 0 ;;
+    *)
+      files+=("$1"); shift ;;
+  esac
+done
+
+[[ ${#files[@]} -eq 2 ]] || { echo "usage: diff-text <image1> <image2>" >&2; exit 2; }
+[[ -f "${files[0]}" ]] || { echo "error: file not found: ${files[0]}" >&2; exit 1; }
+[[ -f "${files[1]}" ]] || { echo "error: file not found: ${files[1]}" >&2; exit 1; }
+
+command -v auge >/dev/null || { echo "error: auge not found" >&2; exit 1; }
+
+tmp1=$(mktemp /tmp/diff-text-1-XXXXXX.txt)
+tmp2=$(mktemp /tmp/diff-text-2-XXXXXX.txt)
+trap 'rm -f "$tmp1" "$tmp2"' EXIT
+
+echo "OCR: ${files[0]}..." >&2
+auge --ocr "${files[0]}" -q 2>/dev/null > "$tmp1"
+
+echo "OCR: ${files[1]}..." >&2
+auge --ocr "${files[1]}" -q 2>/dev/null > "$tmp2"
+
+if $side; then
+  output=$(diff --side-by-side --width=120 "$tmp1" "$tmp2" 2>/dev/null || true)
+else
+  output=$(diff --unified=3 \
+    --label "$(basename "${files[0]}")" \
+    --label "$(basename "${files[1]}")" \
+    "$tmp1" "$tmp2" 2>/dev/null || true)
+fi
+
+if [[ -z "$output" ]]; then
+  echo "No text differences found."
+else
+  echo "$output"
+fi
+
+if $copy && [[ -n "$output" ]]; then
+  printf '%s' "$output" | pbcopy
+  printf '\033[2m(copied to clipboard)\033[0m\n' >&2
+fi

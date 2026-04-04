@@ -1,0 +1,85 @@
+#!/bin/bash
+# clipboard-ocr — OCR an image from the clipboard
+#
+# Grabs the current clipboard image (e.g. from Cmd+Ctrl+Shift+4)
+# and runs OCR on it. No file needed.
+#
+# Usage:
+#   clipboard-ocr                 # OCR clipboard image, print text
+#   clipboard-ocr -c              # OCR and replace clipboard with text
+#   clipboard-ocr -j              # JSON output
+#
+# Examples:
+#   # 1. Press Cmd+Ctrl+Shift+4 to screenshot to clipboard
+#   # 2. Run:
+#   clipboard-ocr
+#
+#   # Screenshot to clipboard, OCR, pipe to apfel:
+#   clipboard-ocr | apfel "summarize this"
+#
+#   # Screenshot to clipboard, replace clipboard with extracted text:
+#   clipboard-ocr -c
+#
+# Requires: auge
+
+set -euo pipefail
+
+copy=false
+json=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--copy) copy=true; shift ;;
+    -j|--json) json=true; shift ;;
+    -h|--help)
+      sed -n '2,/^$/{ s/^# //; s/^#//; p; }' "$0"
+      exit 0 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
+  esac
+done
+
+command -v auge >/dev/null || { echo "error: auge not found" >&2; exit 1; }
+
+tmp=$(mktemp /tmp/clipboard-ocr-XXXXXX.png)
+trap 'rm -f "$tmp"' EXIT
+
+# Try to get image from clipboard via osascript
+osascript -e '
+  set theFile to POSIX file "'"$tmp"'"
+  try
+    set imgData to the clipboard as «class PNGf»
+    set fileRef to open for access theFile with write permission
+    write imgData to fileRef
+    close access fileRef
+  on error
+    try
+      close access theFile
+    end try
+    error "No image on clipboard"
+  end try
+' 2>/dev/null
+
+if [[ ! -s "$tmp" ]]; then
+  echo "error: no image found on clipboard" >&2
+  echo "Tip: press Cmd+Ctrl+Shift+4 to screenshot a region to clipboard" >&2
+  exit 1
+fi
+
+if $json; then
+  output=$(auge --ocr "$tmp" -o json -q 2>/dev/null)
+else
+  output=$(auge --ocr "$tmp" -q 2>/dev/null)
+fi
+
+if [[ -z "$output" ]]; then
+  echo "No text detected in clipboard image." >&2
+  exit 0
+fi
+
+if $copy; then
+  printf '%s' "$output" | pbcopy
+  echo "$output"
+  printf '\033[2m(text replaced clipboard image)\033[0m\n' >&2
+else
+  echo "$output"
+fi

@@ -100,6 +100,64 @@ find . -name "*.jpg" | auge --classify --top 3
 auge --ocr receipt.png -o json | jq -r .results.text
 ```
 
+## Demos
+
+See [`demo/`](./demo/) for real-world shell scripts powered by auge.
+
+**[screenshot](./demo/screenshot)** — capture screen and extract text instantly:
+
+```bash
+demo/screenshot                    # full screen OCR
+demo/screenshot -r                 # drag to select a region
+demo/screenshot -c                 # copy text to clipboard
+demo/screenshot | grep "error"     # find errors on screen
+```
+
+**[clipboard-ocr](./demo/clipboard-ocr)** — OCR an image from the clipboard:
+
+```bash
+# Press Cmd+Ctrl+Shift+4 to screenshot a region to clipboard, then:
+demo/clipboard-ocr                 # print extracted text
+demo/clipboard-ocr -c              # replace clipboard image with text
+demo/clipboard-ocr | apfel "summarize this"
+```
+
+**[describe](./demo/describe)** — describe an image in natural language (auge + apfel):
+
+```bash
+demo/describe photo.jpg            # "A cat sleeping on a blue couch..."
+demo/describe screenshot.png -c    # describe and copy
+```
+
+**[translate](./demo/translate)** — OCR text from image and translate (auge + apfel):
+
+```bash
+demo/translate menu.jpg            # translate to English
+demo/translate -l German sign.png  # translate to German
+demo/translate -l Japanese doc.pdf
+```
+
+**[receipt](./demo/receipt)** — extract structured data from receipt photos (auge + apfel):
+
+```bash
+demo/receipt grocery.jpg           # vendor, date, total, items
+demo/receipt -j scan.png | jq .total
+```
+
+**[explain-image](./demo/explain-image)** — full image analysis (auge + apfel):
+
+```bash
+demo/explain-image screenshot.png  # classify + OCR + faces + barcodes → explanation
+demo/explain-image error.png -c    # explain an error dialog
+```
+
+Also in `demo/`:
+- **[qr](./demo/qr)** — read QR codes and barcodes, optionally open URLs
+- **[sort-images](./demo/sort-images)** — classify all images in a directory, group by category
+- **[diff-text](./demo/diff-text)** — OCR two images and diff the extracted text
+- **[faces](./demo/faces)** — count faces across photos with per-file summary
+- **[monitor](./demo/monitor)** — watch mode: periodic screen OCR, alert on text changes or pattern match
+
 ## CLI Reference
 
 ```

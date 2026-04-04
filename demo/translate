@@ -1,0 +1,66 @@
+#!/bin/bash
+# translate — OCR text from an image and translate it
+#
+# Extracts text with auge OCR, then translates with apfel.
+# Keeps OCR output short to fit apfel's 4096-token window.
+#
+# Usage:
+#   translate <image>                  # translate to English (default)
+#   translate -l German <image>        # translate to specific language
+#   translate -c <image>               # copy translation to clipboard
+#
+# Examples:
+#   translate menu.jpg                 # OCR a foreign menu, translate
+#   translate -l Spanish sign.png      # translate sign to Spanish
+#   translate -l Japanese doc.pdf -c   # translate and copy
+#   translate screenshot.png -l French
+#
+# Requires: auge, apfel
+
+set -euo pipefail
+
+copy=false
+lang="English"
+file=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--copy)     copy=true; shift ;;
+    -l|--language) lang="${2:-English}"; shift 2 ;;
+    -h|--help)
+      sed -n '2,/^$/{ s/^# //; s/^#//; p; }' "$0"
+      exit 0 ;;
+    *)
+      [[ -z "$file" ]] && file="$1" || { echo "error: too many arguments" >&2; exit 2; }
+      shift ;;
+  esac
+done
+
+[[ -n "$file" ]] || { echo "usage: translate [-l language] <image>" >&2; exit 2; }
+[[ -f "$file" ]] || { echo "error: file not found: $file" >&2; exit 1; }
+
+command -v auge >/dev/null || { echo "error: auge not found" >&2; exit 1; }
+command -v apfel >/dev/null || { echo "error: apfel not found" >&2; exit 1; }
+
+# OCR — truncate to ~20 lines to stay under token budget
+text=$(auge --ocr "$file" -q 2>/dev/null | head -20)
+
+if [[ -z "$text" ]]; then
+  echo "No text detected in $file" >&2
+  exit 0
+fi
+
+output=$(apfel -q -s "Translate the following text to $lang. Output only the translation, nothing else." "$text" 2>/dev/null)
+
+if [[ -z "$output" ]]; then
+  echo "Translation failed." >&2
+  exit 1
+fi
+
+if $copy; then
+  printf '%s' "$output" | pbcopy
+  echo "$output"
+  printf '\033[2m(copied to clipboard)\033[0m\n' >&2
+else
+  echo "$output"
+fi

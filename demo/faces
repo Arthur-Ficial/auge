@@ -1,0 +1,73 @@
+#!/bin/bash
+# faces — count faces across photos with per-file summary
+#
+# Usage:
+#   faces <image>                 # count faces in one image
+#   faces <image1> <image2> ...   # count faces across multiple images
+#   faces *.jpg                   # count faces in all JPGs
+#   faces -j <image>              # JSON output
+#
+# Examples:
+#   faces group.jpg
+#   faces *.png *.jpg
+#   faces ~/Photos/*.heic -j | jq
+#   faces team1.jpg team2.jpg team3.jpg
+#
+# Requires: auge
+
+set -euo pipefail
+
+json=false
+files=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -j|--json) json=true; shift ;;
+    -h|--help)
+      sed -n '2,/^$/{ s/^# //; s/^#//; p; }' "$0"
+      exit 0 ;;
+    -*)
+      echo "unknown option: $1" >&2; exit 2 ;;
+    *)
+      files+=("$1"); shift ;;
+  esac
+done
+
+[[ ${#files[@]} -gt 0 ]] || { echo "usage: faces <image> [image2] ..." >&2; exit 2; }
+
+command -v auge >/dev/null || { echo "error: auge not found" >&2; exit 1; }
+
+total=0
+
+if $json; then
+  echo "["
+  first=true
+  for f in "${files[@]}"; do
+    [[ -f "$f" ]] || { echo "  skipping: $f (not found)" >&2; continue; }
+    $first && first=false || echo ","
+    result=$(auge --faces "$f" -o json -q 2>/dev/null)
+    count=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('results',{}).get('count',0))" 2>/dev/null || echo 0)
+    total=$((total + count))
+    printf '  {"file": "%s", "faces": %s}' "$(basename "$f")" "$count"
+  done
+  echo ""
+  echo "]"
+else
+  for f in "${files[@]}"; do
+    [[ -f "$f" ]] || { echo "  skipping: $f (not found)" >&2; continue; }
+    result=$(auge --faces "$f" -q 2>/dev/null)
+    count=$(echo "$result" | grep -o '^[0-9]*')
+    total=$((total + count))
+    if [[ ${#files[@]} -gt 1 ]]; then
+      printf '  %-40s %s\n' "$(basename "$f")" "$result"
+    else
+      echo "$result"
+    fi
+  done
+
+  if [[ ${#files[@]} -gt 1 ]]; then
+    echo ""
+    noun="face"; [[ $total -ne 1 ]] && noun="faces"
+    echo "$total $noun across ${#files[@]} images."
+  fi
+fi

@@ -1,0 +1,66 @@
+#!/bin/bash
+# screenshot — capture screen and extract text instantly
+#
+# Usage:
+#   screenshot                    # full screen OCR
+#   screenshot -r                 # select region interactively
+#   screenshot -c                 # copy text to clipboard
+#   screenshot -j                 # JSON output
+#
+# Examples:
+#   screenshot                    # grab all text on screen
+#   screenshot -r                 # drag to select a region, OCR it
+#   screenshot -r -c              # select region, copy text to clipboard
+#   screenshot | grep "error"     # find errors on screen
+#
+# Requires: auge
+
+set -euo pipefail
+
+copy=false
+region=false
+json=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--copy)    copy=true; shift ;;
+    -r|--region)  region=true; shift ;;
+    -j|--json)    json=true; shift ;;
+    -h|--help)
+      sed -n '2,/^$/{ s/^# //; s/^#//; p; }' "$0"
+      exit 0 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
+  esac
+done
+
+command -v auge >/dev/null || { echo "error: auge not found. Install: brew install Arthur-Ficial/tap/auge" >&2; exit 1; }
+
+tmp=$(mktemp /tmp/screenshot-XXXXXX.png)
+trap 'rm -f "$tmp"' EXIT
+
+if $region; then
+  screencapture -i "$tmp" 2>/dev/null
+else
+  screencapture -x "$tmp" 2>/dev/null
+fi
+
+[[ -s "$tmp" ]] || { echo "error: no screenshot captured" >&2; exit 1; }
+
+if $json; then
+  output=$(auge --ocr "$tmp" -o json -q 2>/dev/null)
+else
+  output=$(auge --ocr "$tmp" -q 2>/dev/null)
+fi
+
+if [[ -z "$output" ]]; then
+  echo "No text detected on screen." >&2
+  exit 0
+fi
+
+if $copy; then
+  printf '%s' "$output" | pbcopy
+  echo "$output"
+  printf '\033[2m(copied to clipboard)\033[0m\n' >&2
+else
+  echo "$output"
+fi

@@ -1,0 +1,77 @@
+#!/bin/bash
+# explain-image — get a full explanation of what's in an image
+#
+# Combines OCR + classification from auge, then feeds a compact
+# summary to apfel for a detailed explanation. Stays within
+# apfel's 4096-token context window.
+#
+# Usage:
+#   explain-image <image>         # explain what's in the image
+#   explain-image -c <image>      # copy explanation to clipboard
+#
+# Examples:
+#   explain-image screenshot.png        # what's on this screen?
+#   explain-image error_dialog.png      # explain an error dialog
+#   explain-image dashboard.png -c      # explain dashboard, copy
+#   explain-image diagram.jpg           # explain a diagram
+#
+# Requires: auge, apfel
+
+set -euo pipefail
+
+copy=false
+file=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--copy) copy=true; shift ;;
+    -h|--help)
+      sed -n '2,/^$/{ s/^# //; s/^#//; p; }' "$0"
+      exit 0 ;;
+    *)
+      [[ -z "$file" ]] && file="$1" || { echo "error: too many arguments" >&2; exit 2; }
+      shift ;;
+  esac
+done
+
+[[ -n "$file" ]] || { echo "usage: explain-image <image>" >&2; exit 2; }
+[[ -f "$file" ]] || { echo "error: file not found: $file" >&2; exit 1; }
+
+command -v auge >/dev/null || { echo "error: auge not found" >&2; exit 1; }
+command -v apfel >/dev/null || { echo "error: apfel not found" >&2; exit 1; }
+
+# Gather data — keep compact for token budget
+labels=$(auge --classify "$file" --top 5 -q 2>/dev/null)
+text=$(auge --ocr "$file" -q 2>/dev/null | head -15)
+face_count=$(auge --faces "$file" -q 2>/dev/null | grep -o '^[0-9]*' || echo "0")
+barcodes=$(auge --barcode "$file" -q 2>/dev/null)
+
+# Build prompt — everything in one tight block
+prompt="Analyze this image based on the following data:
+
+Classifications: ${labels:-none detected}
+Text found (OCR): ${text:-none detected}
+Faces: ${face_count}
+Barcodes: ${barcodes:-none detected}
+
+Explain what this image shows in 2-4 sentences. Be specific about visible text, categories, and any notable elements."
+
+output=$(apfel -q -s "You analyze images based on classification and OCR data. Be specific and helpful." "$prompt" 2>/dev/null)
+
+if [[ -z "$output" ]]; then
+  # Fallback: just show raw data
+  echo "Classifications:"
+  echo "$labels"
+  [[ -n "$text" ]] && echo "" && echo "Text:" && echo "$text"
+  [[ "$face_count" != "0" ]] && echo "" && echo "Faces: $face_count"
+  [[ -n "$barcodes" ]] && echo "" && echo "Barcodes:" && echo "$barcodes"
+  exit 0
+fi
+
+if $copy; then
+  printf '%s' "$output" | pbcopy
+  echo "$output"
+  printf '\033[2m(copied to clipboard)\033[0m\n' >&2
+else
+  echo "$output"
+fi

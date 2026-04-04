@@ -1,0 +1,83 @@
+#!/bin/bash
+# qr — read QR codes and barcodes from images
+#
+# Usage:
+#   qr <image>                    # read barcode/QR code
+#   qr -o <image>                 # open URL in browser if QR contains one
+#   qr -c <image>                 # copy payload to clipboard
+#   qr -j <image>                 # JSON output
+#
+# Examples:
+#   qr product.jpg                # read barcode
+#   qr qrcode.png -o              # scan QR and open the URL
+#   qr badge.png -c               # copy QR payload to clipboard
+#   qr ticket.png -j | jq         # structured output
+#
+# Requires: auge
+
+set -euo pipefail
+
+copy=false
+open_url=false
+json=false
+file=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--copy)    copy=true; shift ;;
+    -o|--open)    open_url=true; shift ;;
+    -j|--json)    json=true; shift ;;
+    -h|--help)
+      sed -n '2,/^$/{ s/^# //; s/^#//; p; }' "$0"
+      exit 0 ;;
+    *)
+      [[ -z "$file" ]] && file="$1" || { echo "error: too many arguments" >&2; exit 2; }
+      shift ;;
+  esac
+done
+
+[[ -n "$file" ]] || { echo "usage: qr <image>" >&2; exit 2; }
+[[ -f "$file" ]] || { echo "error: file not found: $file" >&2; exit 1; }
+
+command -v auge >/dev/null || { echo "error: auge not found" >&2; exit 1; }
+
+if $json; then
+  output=$(auge --barcode "$file" -o json -q 2>/dev/null)
+  if [[ -z "$output" ]] || echo "$output" | grep -q '"barcodes" : \[\]'; then
+    echo "No barcodes found in $file" >&2
+    exit 0
+  fi
+  echo "$output"
+else
+  output=$(auge --barcode "$file" -q 2>/dev/null)
+  if [[ -z "$output" ]]; then
+    echo "No barcodes found in $file" >&2
+    exit 0
+  fi
+  echo "$output"
+fi
+
+# Extract first payload for -o and -c
+payload=$(auge --barcode "$file" -o json -q 2>/dev/null | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    barcodes = d.get('results', {}).get('barcodes', [])
+    if barcodes:
+        print(barcodes[0].get('payload', ''))
+except: pass
+" 2>/dev/null)
+
+if $open_url && [[ -n "$payload" ]]; then
+  if [[ "$payload" == http://* ]] || [[ "$payload" == https://* ]]; then
+    open "$payload"
+    printf '\033[2m(opened in browser)\033[0m\n' >&2
+  else
+    echo "Payload is not a URL: $payload" >&2
+  fi
+fi
+
+if $copy && [[ -n "$payload" ]]; then
+  printf '%s' "$payload" | pbcopy
+  printf '\033[2m(copied to clipboard)\033[0m\n' >&2
+fi

@@ -1,0 +1,67 @@
+#!/bin/bash
+# describe — describe an image in natural language
+#
+# Classifies an image with auge, then asks apfel to write a description.
+# Keeps payload tiny to fit apfel's 4096-token context window.
+#
+# Usage:
+#   describe <image>              # describe what's in the image
+#   describe -c <image>           # copy description to clipboard
+#
+# Examples:
+#   describe photo.jpg
+#   describe screenshot.png -c
+#   describe vacation.heic
+#
+# Requires: auge, apfel
+
+set -euo pipefail
+
+copy=false
+file=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--copy) copy=true; shift ;;
+    -h|--help)
+      sed -n '2,/^$/{ s/^# //; s/^#//; p; }' "$0"
+      exit 0 ;;
+    *)
+      [[ -z "$file" ]] && file="$1" || { echo "error: too many arguments" >&2; exit 2; }
+      shift ;;
+  esac
+done
+
+[[ -n "$file" ]] || { echo "usage: describe <image>" >&2; exit 2; }
+[[ -f "$file" ]] || { echo "error: file not found: $file" >&2; exit 1; }
+
+command -v auge >/dev/null || { echo "error: auge not found" >&2; exit 1; }
+command -v apfel >/dev/null || { echo "error: apfel not found" >&2; exit 1; }
+
+# Classify — top 5, stays well under token budget
+labels=$(auge --classify "$file" --top 5 -q 2>/dev/null)
+
+# OCR — first 10 lines max (~200 tokens)
+text=$(auge --ocr "$file" -q 2>/dev/null | head -10)
+
+# Build a tight prompt for apfel
+prompt="Image classifications: ${labels:-none}"
+[[ -n "$text" ]] && prompt="$prompt
+Text found in image: $text"
+prompt="$prompt
+Describe this image in 1-2 natural sentences based on the data above."
+
+output=$(apfel -q -s "You describe images concisely based on classification and OCR data. Be specific." "$prompt" 2>/dev/null)
+
+if [[ -z "$output" ]]; then
+  echo "Could not generate description." >&2
+  exit 1
+fi
+
+if $copy; then
+  printf '%s' "$output" | pbcopy
+  echo "$output"
+  printf '\033[2m(copied to clipboard)\033[0m\n' >&2
+else
+  echo "$output"
+fi
