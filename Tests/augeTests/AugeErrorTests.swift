@@ -45,6 +45,7 @@ func runAugeErrorTests() {
         try assertEqual(AugeError.visionUnavailable.cliLabel, "[vision unavailable]")
         try assertEqual(AugeError.noTextFound.cliLabel, "[no text found]")
         try assertEqual(AugeError.noResults.cliLabel, "[no results]")
+        try assertEqual(AugeError.pdfRenderFailure("x").cliLabel, "[pdf error]")
         try assertEqual(AugeError.unknown("x").cliLabel, "[error]")
     }
 
@@ -57,6 +58,7 @@ func runAugeErrorTests() {
         try assertEqual(AugeError.visionUnavailable.exitCode, 5)
         try assertEqual(AugeError.noTextFound.exitCode, 0)
         try assertEqual(AugeError.noResults.exitCode, 0)
+        try assertEqual(AugeError.pdfRenderFailure("x").exitCode, 1)
         try assertEqual(AugeError.unknown("x").exitCode, 1)
     }
 
@@ -65,7 +67,7 @@ func runAugeErrorTests() {
     test("userMessage is non-empty for all cases") {
         let cases: [AugeError] = [
             .fileNotFound("/tmp/x.png"), .invalidImage, .unsupportedFormat("bmp"),
-            .visionUnavailable, .noTextFound, .noResults, .unknown("oops")
+            .visionUnavailable, .noTextFound, .noResults, .pdfRenderFailure("x"), .unknown("oops")
         ]
         for c in cases {
             try assertTrue(!c.userMessage.isEmpty, "\(c)")

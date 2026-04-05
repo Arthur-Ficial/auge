@@ -89,6 +89,16 @@ func runAugeErrorDeepTests() {
             throw TestFailure("wrong case")
         }
     }
+    test("classify passthrough: pdfRenderFailure preserves detail") {
+        let original = AugeError.pdfRenderFailure("no pages")
+        let classified = AugeError.classify(original)
+        try assertEqual(classified, original)
+        if case .pdfRenderFailure(let detail) = classified {
+            try assertEqual(detail, "no pages")
+        } else {
+            throw TestFailure("wrong case")
+        }
+    }
 
     // --- Cross-type inequality ---
 
@@ -109,6 +119,10 @@ func runAugeErrorDeepTests() {
         let msg = AugeError.unsupportedFormat("webp").userMessage
         try assertTrue(msg.contains("webp"), "message: \(msg)")
     }
+    test("userMessage for pdfRenderFailure includes the detail") {
+        let msg = AugeError.pdfRenderFailure("no pages").userMessage
+        try assertTrue(msg.contains("no pages"), "message: \(msg)")
+    }
     test("userMessage for unknown includes the original message") {
         let msg = AugeError.unknown("something broke").userMessage
         try assertTrue(msg.contains("something broke"), "message: \(msg)")
@@ -119,7 +133,7 @@ func runAugeErrorDeepTests() {
     test("all cliLabels are bracketed") {
         let allErrors: [AugeError] = [
             .fileNotFound("x"), .invalidImage, .unsupportedFormat("x"),
-            .visionUnavailable, .noTextFound, .noResults, .unknown("x")
+            .visionUnavailable, .noTextFound, .noResults, .pdfRenderFailure("x"), .unknown("x")
         ]
         for err in allErrors {
             let label = err.cliLabel
@@ -137,7 +151,7 @@ func runAugeErrorDeepTests() {
     test("all real errors have non-zero exit codes") {
         let errors: [AugeError] = [
             .fileNotFound("x"), .invalidImage, .unsupportedFormat("x"),
-            .visionUnavailable, .unknown("x")
+            .visionUnavailable, .pdfRenderFailure("x"), .unknown("x")
         ]
         for err in errors {
             try assertTrue(err.exitCode != 0, "\(err) should have non-zero exit")
