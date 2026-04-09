@@ -4,6 +4,7 @@
 // ============================================================================
 
 import Foundation
+import UniformTypeIdentifiers
 import Vision
 import AugeCore
 
@@ -23,7 +24,10 @@ enum Analyzer {
     // MARK: - PDF detection
 
     private static func isPDF(_ url: URL) -> Bool {
-        url.pathExtension.lowercased() == "pdf"
+        guard let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else {
+            return false
+        }
+        return type.conforms(to: .pdf)
     }
 
     // MARK: - Handler creation
