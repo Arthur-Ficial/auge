@@ -4,6 +4,7 @@
 // ============================================================================
 
 import Foundation
+import UniformTypeIdentifiers
 import Vision
 import AugeCore
 
@@ -19,69 +20,116 @@ enum AnalysisMode: String, Sendable {
 // MARK: - Analyzer
 
 enum Analyzer {
+
+    // MARK: - PDF detection
+
+    private static func isPDF(_ url: URL) -> Bool {
+        guard let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else {
+            return false
+        }
+        return type.conforms(to: .pdf)
+    }
+
+    // MARK: - Handler creation
+
+    /// Create VNImageRequestHandlers for a given URL.
+    /// For PDFs, renders each page to a CGImage. For images, returns a single handler.
+    private static func makeHandlers(for url: URL) throws -> [VNImageRequestHandler] {
+        if isPDF(url) {
+            let images = try PDFRenderer.renderPages(at: url)
+            return images.map { VNImageRequestHandler(cgImage: $0, options: [:]) }
+        } else {
+            return [VNImageRequestHandler(url: url, options: [:])]
+        }
+    }
+
+    // MARK: - OCR
+
     /// Perform OCR on an image at the given URL.
     static func recognizeText(at url: URL) throws -> [String] {
-        let handler = VNImageRequestHandler(url: url, options: [:])
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        try handler.perform([request])
+        let handlers = try makeHandlers(for: url)
+        var allLines: [String] = []
 
-        guard let observations = request.results else {
-            return []
+        for handler in handlers {
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            try handler.perform([request])
+
+            guard let observations = request.results else { continue }
+            let lines = observations.compactMap { $0.topCandidates(1).first?.string }
+            allLines.append(contentsOf: lines)
         }
-        return observations.compactMap { $0.topCandidates(1).first?.string }
+        return allLines
     }
+
+    // MARK: - Classification
 
     /// Classify an image at the given URL.
     static func classifyImage(at url: URL) throws -> [ClassificationResult] {
-        let handler = VNImageRequestHandler(url: url, options: [:])
-        let request = VNClassifyImageRequest()
-        try handler.perform([request])
+        let handlers = try makeHandlers(for: url)
+        var allResults: [ClassificationResult] = []
 
-        guard let observations = request.results else {
-            return []
+        for handler in handlers {
+            let request = VNClassifyImageRequest()
+            try handler.perform([request])
+
+            guard let observations = request.results else { continue }
+            let results = observations
+                .filter { $0.confidence > 0.01 }
+                .sorted { $0.confidence > $1.confidence }
+                .prefix(10)
+                .map { ClassificationResult(label: $0.identifier, confidence: Double($0.confidence)) }
+            allResults.append(contentsOf: results)
         }
-        return observations
-            .filter { $0.confidence > 0.01 }
-            .sorted { $0.confidence > $1.confidence }
-            .prefix(10)
-            .map { ClassificationResult(label: $0.identifier, confidence: Double($0.confidence)) }
+        return allResults
     }
+
+    // MARK: - Barcodes
 
     /// Detect barcodes in an image at the given URL.
     static func detectBarcodes(at url: URL) throws -> [BarcodeResult] {
-        let handler = VNImageRequestHandler(url: url, options: [:])
-        let request = VNDetectBarcodesRequest()
-        try handler.perform([request])
+        let handlers = try makeHandlers(for: url)
+        var allResults: [BarcodeResult] = []
 
-        guard let observations = request.results else {
-            return []
+        for handler in handlers {
+            let request = VNDetectBarcodesRequest()
+            try handler.perform([request])
+
+            guard let observations = request.results else { continue }
+            let results = observations.compactMap { obs in
+                guard let payload = obs.payloadStringValue else { return nil as BarcodeResult? }
+                let symbology = obs.symbology.rawValue
+                    .replacingOccurrences(of: "VNBarcodeSymbology", with: "")
+                return BarcodeResult(payload: payload, symbology: symbology)
+            }
+            allResults.append(contentsOf: results)
         }
-        return observations.compactMap { obs in
-            guard let payload = obs.payloadStringValue else { return nil }
-            let symbology = obs.symbology.rawValue
-                .replacingOccurrences(of: "VNBarcodeSymbology", with: "")
-            return BarcodeResult(payload: payload, symbology: symbology)
-        }
+        return allResults
     }
+
+    // MARK: - Faces
 
     /// Detect faces in an image at the given URL.
     static func detectFaces(at url: URL) throws -> [FaceResult] {
-        let handler = VNImageRequestHandler(url: url, options: [:])
-        let request = VNDetectFaceRectanglesRequest()
-        try handler.perform([request])
+        let handlers = try makeHandlers(for: url)
+        var allResults: [FaceResult] = []
 
-        guard let observations = request.results else {
-            return []
+        for handler in handlers {
+            let request = VNDetectFaceRectanglesRequest()
+            try handler.perform([request])
+
+            guard let observations = request.results else { continue }
+            let results = observations.map { obs in
+                let box = obs.boundingBox
+                return FaceResult(
+                    x: Double(box.origin.x),
+                    y: Double(box.origin.y),
+                    width: Double(box.size.width),
+                    height: Double(box.size.height)
+                )
+            }
+            allResults.append(contentsOf: results)
         }
-        return observations.map { obs in
-            let box = obs.boundingBox
-            return FaceResult(
-                x: Double(box.origin.x),
-                y: Double(box.origin.y),
-                width: Double(box.size.width),
-                height: Double(box.size.height)
-            )
-        }
+        return allResults
     }
 }

@@ -102,6 +102,57 @@ if [ -f "$TEST_IMG" ]; then
     [ $? -eq 0 ] && pass "--barcode exits 0 (no barcodes)" || fail "--barcode" "expected exit 0"
 fi
 
+# --- PDF: single page ---
+echo ""
+echo "PDF single page"
+
+SINGLE_PDF="$DIR/test_single_page.pdf"
+if [ -f "$SINGLE_PDF" ]; then
+    out=$($AUGE --ocr "$SINGLE_PDF" 2>&1)
+    rc=$?
+    [ $rc -eq 0 ] && pass "--ocr single-page PDF exits 0" || fail "--ocr single PDF" "expected exit 0, got $rc"
+    echo "$out" | grep -qi "crazy ones" && pass "--ocr single-page PDF detects text" || fail "--ocr single PDF" "expected 'crazy ones' in output"
+    echo "$out" | grep -qi "misfits" && pass "--ocr single-page PDF body text" || fail "--ocr single PDF" "expected 'misfits' in output"
+    echo "$out" | grep -qi "apple" && pass "--ocr single-page PDF footer" || fail "--ocr single PDF" "expected 'Apple' in output"
+
+    out=$($AUGE --ocr "$SINGLE_PDF" -o json 2>&1)
+    echo "$out" | grep -q '"mode" : "ocr"' && pass "--ocr single-page PDF json" || fail "--ocr single PDF json" "expected mode:ocr"
+
+    out=$($AUGE --classify "$SINGLE_PDF" 2>&1)
+    rc=$?
+    [ $rc -eq 0 ] && pass "--classify single-page PDF exits 0" || fail "--classify single PDF" "expected exit 0, got $rc"
+
+    $AUGE --faces "$SINGLE_PDF" -o json 2>/dev/null | grep -q '"count"' && pass "--faces single-page PDF json" || fail "--faces single PDF" "expected count field"
+else
+    fail "single-page PDF" "missing $SINGLE_PDF"
+fi
+
+# --- PDF: multi page ---
+echo ""
+echo "PDF multi page"
+
+MULTI_PDF="$DIR/test_multi_page.pdf"
+if [ -f "$MULTI_PDF" ]; then
+    out=$($AUGE --ocr "$MULTI_PDF" 2>&1)
+    rc=$?
+    [ $rc -eq 0 ] && pass "--ocr multi-page PDF exits 0" || fail "--ocr multi PDF" "expected exit 0, got $rc"
+
+    echo "$out" | grep -qi "crazy ones" && pass "--ocr multi-page PDF detects text" || fail "--ocr multi PDF" "expected 'crazy ones'"
+
+    # 3 pages of identical content — "crazy ones" must appear 3 times
+    count=$(echo "$out" | grep -ci "crazy ones")
+    [ "$count" -ge 3 ] && pass "--ocr multi-page PDF has all 3 pages ($count occurrences)" || fail "--ocr multi PDF" "expected 'crazy ones' 3+ times, got $count"
+
+    out=$($AUGE --ocr "$MULTI_PDF" -o json 2>&1)
+    echo "$out" | grep -q '"mode" : "ocr"' && pass "--ocr multi-page PDF json" || fail "--ocr multi PDF json" "expected mode:ocr"
+
+    out=$($AUGE --classify "$MULTI_PDF" 2>&1)
+    rc=$?
+    [ $rc -eq 0 ] && pass "--classify multi-page PDF exits 0" || fail "--classify multi PDF" "expected exit 0, got $rc"
+else
+    fail "multi-page PDF" "missing $MULTI_PDF"
+fi
+
 # --- Piping ---
 echo ""
 echo "Piping"

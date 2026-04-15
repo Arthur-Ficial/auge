@@ -7,6 +7,7 @@ public enum AugeError: Error, Equatable, Sendable {
     case visionUnavailable
     case noTextFound
     case noResults
+    case pdfRenderFailure(String)
     case unknown(String)
 
     /// Classify any thrown error into a typed AugeError.
@@ -39,6 +40,7 @@ public enum AugeError: Error, Equatable, Sendable {
         case .visionUnavailable:  return "[vision unavailable]"
         case .noTextFound:        return "[no text found]"
         case .noResults:          return "[no results]"
+        case .pdfRenderFailure:   return "[pdf error]"
         case .unknown:            return "[error]"
         }
     }
@@ -51,6 +53,7 @@ public enum AugeError: Error, Equatable, Sendable {
         case .visionUnavailable:  return 5
         case .noTextFound:        return 0
         case .noResults:          return 0
+        case .pdfRenderFailure:   return 1
         case .unknown:            return 1
         }
     }
@@ -69,6 +72,8 @@ public enum AugeError: Error, Equatable, Sendable {
             return "No text was detected in the image."
         case .noResults:
             return "No results were detected in the image."
+        case .pdfRenderFailure(let detail):
+            return "Failed to render PDF: \(detail)"
         case .unknown(let msg):
             return msg
         }
