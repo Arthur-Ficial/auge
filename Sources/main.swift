@@ -24,6 +24,11 @@ func exitCode(for error: AugeError) -> Int32 {
     return error.exitCode
 }
 
+// MARK: - Network Guard
+// Hard-block any HTTP/HTTPS/WS/WSS request inside the process. auge is on-device only.
+
+NetworkGuard.install()
+
 // MARK: - Signal Handling
 
 signal(SIGINT) { _ in
@@ -54,6 +59,12 @@ var mode: AnalysisMode? = nil
 var filePaths: [String] = []
 var topN: Int = 10
 var minConfidence: Double = 0.01
+var useClipboard = false
+var pdfDPI: Int = 200
+var preferEmbedded: Bool = true
+var languageHints: [String] = []
+var enhanceImages: Bool = false
+var cleanText: Bool = false
 
 var i = 0
 while i < args.count {
@@ -73,14 +84,29 @@ while i < args.count {
     case "-o", "--output":
         i += 1
         guard i < args.count else {
-            printError("--output requires a value (plain or json)")
+            printError("--output requires a value (plain, json, md, or ndjson)")
             exit(exitUsageError)
         }
         guard let fmt = OutputFormat(rawValue: args[i]) else {
-            printError("unknown output format: \(args[i]) (use plain or json)")
+            printError("unknown output format: \(args[i]) (use plain, json, md, or ndjson)")
             exit(exitUsageError)
         }
         outputFormat = fmt
+
+    case "--plain":
+        outputFormat = .plain
+
+    case "--md":
+        outputFormat = .md
+
+    case "--json":
+        outputFormat = .json
+
+    case "--ndjson":
+        outputFormat = .ndjson
+
+    case "--compact":
+        compactMode = true
 
     case "-q", "--quiet":
         quietMode = true
@@ -99,6 +125,41 @@ while i < args.count {
 
     case "--faces":
         mode = .faces
+
+    case "--clipboard":
+        useClipboard = true
+
+    case "--dpi":
+        i += 1
+        guard i < args.count, let n = Int(args[i]), n >= 72, n <= 600 else {
+            printError("--dpi requires a number between 72 and 600")
+            exit(exitUsageError)
+        }
+        pdfDPI = n
+
+    case "--prefer-embedded":
+        preferEmbedded = true
+
+    case "--no-prefer-embedded":
+        preferEmbedded = false
+
+    case "--langs":
+        i += 1
+        guard i < args.count else {
+            printError("--langs requires a value (e.g. en-US,de-DE)")
+            exit(exitUsageError)
+        }
+        languageHints = LanguageHints.parse(args[i])
+        if languageHints.isEmpty {
+            printError("--langs must contain at least one BCP-47 tag")
+            exit(exitUsageError)
+        }
+
+    case "--enhance":
+        enhanceImages = true
+
+    case "--clean":
+        cleanText = true
 
     case "--top":
         i += 1
@@ -127,8 +188,26 @@ while i < args.count {
     i += 1
 }
 
-// Read file paths from stdin if piped
-if isatty(STDIN_FILENO) == 0 && filePaths.isEmpty {
+// --clipboard: read pasteboard image, write to temp file, treat as input.
+// Cannot be combined with file paths. When set, stdin is not consulted for paths.
+if useClipboard {
+    if !filePaths.isEmpty {
+        printError("--clipboard cannot be combined with file paths")
+        exit(exitUsageError)
+    }
+    do {
+        let url = try Clipboard.readImage()
+        filePaths.append(url.path)
+    } catch let err as AugeError {
+        printError("\(err.cliLabel) \(err.userMessage)")
+        exit(err.exitCode)
+    } catch {
+        let classified = AugeError.classify(error)
+        printError("\(classified.cliLabel) \(classified.userMessage)")
+        exit(classified.exitCode)
+    }
+} else if isatty(STDIN_FILENO) == 0 && filePaths.isEmpty {
+    // Read file paths from stdin if piped (no --clipboard)
     while let line = readLine() {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
@@ -164,7 +243,30 @@ for filePath in filePaths {
         do {
             switch analysisMode {
             case .ocr:
-                let lines = try Analyzer.recognizeText(at: url)
+                var lines: [String]
+                if PDFDetect.isPDF(at: url) {
+                    let cfg = PDFProcessor.Configuration(dpi: pdfDPI, preferEmbedded: preferEmbedded)
+                    lines = try Analyzer.recognizeTextInPDF(at: url, config: cfg, languages: languageHints, enhance: enhanceImages)
+                } else {
+                    lines = try Analyzer.recognizeText(at: url, languages: languageHints, enhance: enhanceImages)
+                }
+
+                if cleanText && !lines.isEmpty {
+                    if #available(macOS 26.0, *) {
+                        let input = lines
+                        do {
+                            lines = try runAsync { try await Cleaner.clean(lines: input) }
+                        } catch {
+                            if !quietMode {
+                                printStderr("warning: --clean skipped for \(filePath): \(error.localizedDescription)")
+                            }
+                        }
+                    } else {
+                        printError("--clean requires macOS 26 (Tahoe) — FoundationModels is unavailable on this OS")
+                        exit(exitRuntimeError)
+                    }
+                }
+
                 if lines.isEmpty {
                     if !quietMode {
                         printStderr("No text detected in \(filePath)")

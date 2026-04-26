@@ -45,6 +45,8 @@ func runAugeErrorTests() {
         try assertEqual(AugeError.visionUnavailable.cliLabel, "[vision unavailable]")
         try assertEqual(AugeError.noTextFound.cliLabel, "[no text found]")
         try assertEqual(AugeError.noResults.cliLabel, "[no results]")
+        try assertEqual(AugeError.clipboardEmpty.cliLabel, "[clipboard empty]")
+        try assertEqual(AugeError.networkBlocked("http://x").cliLabel, "[network blocked]")
         try assertEqual(AugeError.unknown("x").cliLabel, "[error]")
     }
 
@@ -57,6 +59,8 @@ func runAugeErrorTests() {
         try assertEqual(AugeError.visionUnavailable.exitCode, 5)
         try assertEqual(AugeError.noTextFound.exitCode, 0)
         try assertEqual(AugeError.noResults.exitCode, 0)
+        try assertEqual(AugeError.clipboardEmpty.exitCode, 1)
+        try assertEqual(AugeError.networkBlocked("http://x").exitCode, 2)
         try assertEqual(AugeError.unknown("x").exitCode, 1)
     }
 
@@ -65,11 +69,24 @@ func runAugeErrorTests() {
     test("userMessage is non-empty for all cases") {
         let cases: [AugeError] = [
             .fileNotFound("/tmp/x.png"), .invalidImage, .unsupportedFormat("bmp"),
-            .visionUnavailable, .noTextFound, .noResults, .unknown("oops")
+            .visionUnavailable, .noTextFound, .noResults,
+            .clipboardEmpty, .networkBlocked("http://example.com"),
+            .unknown("oops")
         ]
         for c in cases {
             try assertTrue(!c.userMessage.isEmpty, "\(c)")
         }
+    }
+
+    // --- New cases carry payloads correctly ---
+
+    test("networkBlocked includes URL in message") {
+        let err = AugeError.networkBlocked("https://example.com/api")
+        try assertTrue(err.userMessage.contains("https://example.com/api"))
+    }
+    test("clipboardEmpty message mentions supported formats") {
+        let msg = AugeError.clipboardEmpty.userMessage
+        try assertTrue(msg.contains("PNG") && msg.contains("JPEG"))
     }
 
     // --- classify passes through existing AugeError ---

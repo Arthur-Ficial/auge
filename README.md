@@ -1,6 +1,6 @@
 # auge
 
-[![Version 0.0.6](https://img.shields.io/badge/version-0.0.6-blue)](https://github.com/Arthur-Ficial/auge)
+[![Version 1.0.0](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/Arthur-Ficial/auge)
 [![Swift 6.3+](https://img.shields.io/badge/Swift-6.3%2B-F05138?logo=swift&logoColor=white)](https://swift.org)
 [![macOS 10.15+](https://img.shields.io/badge/macOS-10.15%2B-000000?logo=apple&logoColor=white)](https://developer.apple.com/macos/)
 [![No Xcode Required](https://img.shields.io/badge/Xcode-not%20required-orange)](https://developer.apple.com/xcode/resources/)
@@ -172,9 +172,18 @@ auge --release                  Show detailed release and build info
 
 | Flag | Description |
 |------|-------------|
-| `-o, --output <fmt>` | Output format: `plain` or `json` |
+| `-o, --output <fmt>` | Output format: `plain`, `json`, `md`, or `ndjson` |
+| `--plain` / `--json` / `--md` / `--ndjson` | Shorthand for `-o <fmt>` |
+| `--compact` | Single-line compact JSON (when output is JSON) |
 | `-q, --quiet` | Suppress non-essential output |
 | `--no-color` | Disable ANSI colors |
+| `--clipboard` | Read image from the macOS clipboard (NSPasteboard) |
+| `--dpi <n>` | PDF rasterization DPI 72-600 (default: 200) |
+| `--prefer-embedded` | Use PDF text layer when present (default) |
+| `--no-prefer-embedded` | Force OCR even on searchable PDFs |
+| `--langs <a,b,c>` | BCP-47 OCR language hints (e.g. `en-US,de-DE`) |
+| `--enhance` | Upscale tiny images before OCR (helps small text) |
+| `--clean` | FoundationModels post-pass: dehyphenate, reflow, fix OCR errors (macOS 26+) |
 | `--top <n>` | Max classification results (default: 10) |
 | `--min-confidence <n>` | Min confidence threshold 0-1 (default: 0.01) |
 | `-v, --version` | Print version |

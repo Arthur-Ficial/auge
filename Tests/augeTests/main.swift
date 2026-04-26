@@ -54,6 +54,12 @@ suite("ImageSourceDeepTests") { runImageSourceDeepTests() }
 suite("ResultFormatterTests") { runResultFormatterTests() }
 suite("ResultFormatterDeepTests") { runResultFormatterDeepTests() }
 suite("CLIParsingTests") { runCLIParsingTests() }
+suite("NetworkGuardTests") { runNetworkGuardTests() }
+suite("PDFDetectTests") { runPDFDetectTests() }
+suite("MarkdownFormatterTests") { runMarkdownFormatterTests() }
+suite("LanguageHintsTests") { runLanguageHintsTests() }
+suite("ImageSizePolicyTests") { runImageSizePolicyTests() }
+suite("CleanChunkerTests") { runCleanChunkerTests() }
 
 // MARK: - Summary
 

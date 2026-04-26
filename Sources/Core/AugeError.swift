@@ -7,6 +7,8 @@ public enum AugeError: Error, Equatable, Sendable {
     case visionUnavailable
     case noTextFound
     case noResults
+    case clipboardEmpty
+    case networkBlocked(String)
     case unknown(String)
 
     /// Classify any thrown error into a typed AugeError.
@@ -39,6 +41,8 @@ public enum AugeError: Error, Equatable, Sendable {
         case .visionUnavailable:  return "[vision unavailable]"
         case .noTextFound:        return "[no text found]"
         case .noResults:          return "[no results]"
+        case .clipboardEmpty:     return "[clipboard empty]"
+        case .networkBlocked:     return "[network blocked]"
         case .unknown:            return "[error]"
         }
     }
@@ -51,6 +55,8 @@ public enum AugeError: Error, Equatable, Sendable {
         case .visionUnavailable:  return 5
         case .noTextFound:        return 0
         case .noResults:          return 0
+        case .clipboardEmpty:     return 1
+        case .networkBlocked:     return 2
         case .unknown:            return 1
         }
     }
@@ -69,6 +75,10 @@ public enum AugeError: Error, Equatable, Sendable {
             return "No text was detected in the image."
         case .noResults:
             return "No results were detected in the image."
+        case .clipboardEmpty:
+            return "Clipboard does not contain a PNG, JPEG, HEIC, TIFF image, or a file URL."
+        case .networkBlocked(let url):
+            return "Network call blocked (auge is on-device only): \(url)"
         case .unknown(let msg):
             return msg
         }

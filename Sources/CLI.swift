@@ -8,7 +8,7 @@ import AugeCore
 
 // MARK: - Output Result
 
-/// Output an analysis result in the configured format (plain or json).
+/// Output an analysis result in the configured format.
 func outputResult(mode: String, file: String, payload: ResultPayload) {
     switch outputFormat {
     case .plain:
@@ -23,6 +23,18 @@ func outputResult(mode: String, file: String, payload: ResultPayload) {
             print(ResultFormatter.formatFaces(p.faces))
         }
 
+    case .md:
+        switch payload {
+        case .ocr(let p):
+            print(ResultFormatter.markdownOCR(p.lines))
+        case .classification(let p):
+            print(ResultFormatter.markdownClassification(p.classifications))
+        case .barcodes(let p):
+            print(ResultFormatter.markdownBarcodes(p.barcodes))
+        case .faces(let p):
+            print(ResultFormatter.markdownFaces(p.faces))
+        }
+
     case .json:
         let response = AugeResponse(
             mode: mode,
@@ -30,7 +42,17 @@ func outputResult(mode: String, file: String, payload: ResultPayload) {
             results: payload,
             metadata: .init(onDevice: true, version: version)
         )
-        print(jsonString(response))
+        print(jsonString(response, pretty: !compactMode))
+
+    case .ndjson:
+        let response = AugeResponse(
+            mode: mode,
+            file: file,
+            results: payload,
+            metadata: .init(onDevice: true, version: version)
+        )
+        // NDJSON: always one line per record, no pretty-print.
+        print(jsonString(response, pretty: false))
     }
 }
 
@@ -78,9 +100,21 @@ func printUsage() {
       \(appName) --faces <image>            Detect faces
 
     \(styled("OPTIONS:", .yellow, .bold))
-      -o, --output <format>     Output format: plain, json [default: plain]
+      -o, --output <format>     Output format: plain, json, md, ndjson [default: plain]
+          --plain               Plain text output (same as -o plain)
+          --json                JSON output (same as -o json)
+          --md                  Markdown output (same as -o md)
+          --ndjson              NDJSON: one compact JSON per line, ideal for multi-file
+          --compact             Compact single-line JSON (when -o json or --json)
       -q, --quiet               Suppress non-essential output
           --no-color            Disable colored output
+          --clipboard           Read image from the macOS clipboard (NSPasteboard)
+          --dpi <n>             PDF rasterization DPI 72-600 [default: 200]
+          --prefer-embedded     Use PDF text layer when present [default]
+          --no-prefer-embedded  Force OCR even on searchable PDFs
+          --langs <a,b,c>       BCP-47 OCR language hints (e.g. en-US,de-DE)
+          --enhance             Upscale tiny images before OCR (helps small text)
+          --clean               Post-process OCR text with FoundationModels (macOS 26+)
           --top <n>             Max classification results [default: 10]
           --min-confidence <n>  Min confidence threshold 0-1 [default: 0.01]
       -h, --help                Show this help

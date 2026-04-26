@@ -9,10 +9,14 @@ import Foundation
 
 /// Supported output formats for responses.
 /// - `plain`: Human-readable text (default). Supports ANSI colors when on a TTY.
-/// - `json`: Machine-readable JSON. Single object per analysis result.
+/// - `json`: Machine-readable JSON. Pretty-printed unless `--compact` is set.
+/// - `md`: Markdown. OCR is plain paragraphs; classify/barcode/faces become bullet lists.
+/// - `ndjson`: One compact JSON object per result, one line each. Best for multi-file pipelines.
 enum OutputFormat: String, Sendable {
     case plain
     case json
+    case md
+    case ndjson
 }
 
 // MARK: - Global State
@@ -31,6 +35,9 @@ nonisolated(unsafe) var outputFormat: OutputFormat = .plain
 
 /// True if --quiet flag was passed (suppresses headers, prompts, chrome)
 nonisolated(unsafe) var quietMode = false
+
+/// True if --compact flag was passed (single-line JSON when output is .json)
+nonisolated(unsafe) var compactMode = false
 
 // MARK: - ANSI Colors
 
