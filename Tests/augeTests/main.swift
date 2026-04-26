@@ -60,6 +60,7 @@ suite("MarkdownFormatterTests") { runMarkdownFormatterTests() }
 suite("LanguageHintsTests") { runLanguageHintsTests() }
 suite("ImageSizePolicyTests") { runImageSizePolicyTests() }
 suite("CleanChunkerTests") { runCleanChunkerTests() }
+suite("LineMergerTests") { runLineMergerTests() }
 
 // MARK: - Summary
 

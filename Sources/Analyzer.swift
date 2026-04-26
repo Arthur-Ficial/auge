@@ -33,7 +33,25 @@ enum Analyzer {
     }
 
     /// Perform OCR on a CGImage (used after rasterizing PDF pages).
+    /// When `languages.count > 1`, runs Vision once per language and merges unique
+    /// lines. Vision's recognizer biases to the first listed language and silently
+    /// skips other scripts on multi-script inputs (e.g. a sign with Chinese +
+    /// Portuguese + English) — multi-pass+merge is the only way to actually catch
+    /// every script the caller asked for.
     static func recognizeText(in image: CGImage, languages: [String] = []) throws -> [String] {
+        if languages.count <= 1 {
+            return try recognizeTextSinglePass(in: image, languages: languages)
+        }
+        var runs: [[String]] = []
+        runs.reserveCapacity(languages.count)
+        for lang in languages {
+            let lines = try recognizeTextSinglePass(in: image, languages: [lang])
+            runs.append(lines)
+        }
+        return LineMerger.merge(runs)
+    }
+
+    private static func recognizeTextSinglePass(in image: CGImage, languages: [String]) throws -> [String] {
         let handler = VNImageRequestHandler(cgImage: image, options: [:])
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
