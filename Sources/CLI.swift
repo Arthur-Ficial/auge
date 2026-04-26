@@ -21,6 +21,11 @@ func outputResult(mode: String, file: String, payload: ResultPayload) {
             print(ResultFormatter.formatBarcodes(p.barcodes))
         case .faces(let p):
             print(ResultFormatter.formatFaces(p.faces))
+        case .all(let p):
+            print(ResultFormatter.formatAll(ocrLines: p.ocr?.lines,
+                                              classifications: p.classify?.classifications,
+                                              barcodes: p.barcodes?.barcodes,
+                                              faces: p.faces?.faces))
         }
 
     case .md:
@@ -33,6 +38,11 @@ func outputResult(mode: String, file: String, payload: ResultPayload) {
             print(ResultFormatter.markdownBarcodes(p.barcodes))
         case .faces(let p):
             print(ResultFormatter.markdownFaces(p.faces))
+        case .all(let p):
+            print(ResultFormatter.markdownAll(ocrLines: p.ocr?.lines,
+                                               classifications: p.classify?.classifications,
+                                               barcodes: p.barcodes?.barcodes,
+                                               faces: p.faces?.faces))
         }
 
     case .json:
@@ -94,6 +104,7 @@ func printUsage() {
     \(styled(appName, .cyan, .bold)) v\(version) — Apple Vision from the command line
 
     \(styled("USAGE:", .yellow, .bold))
+      \(appName) --all <image>              Run every analysis on the image (combined output)
       \(appName) --ocr <image>              Extract text from image (OCR)
       \(appName) --classify <image>         Classify image content
       \(appName) --barcode <image>          Detect barcodes and QR codes

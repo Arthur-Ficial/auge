@@ -126,6 +126,9 @@ while i < args.count {
     case "--faces":
         mode = .faces
 
+    case "--all":
+        mode = .all
+
     case "--clipboard":
         useClipboard = true
 
@@ -311,6 +314,76 @@ for filePath in filePaths {
                 outputResult(mode: "faces", file: filePath, payload: .faces(
                     FacesPayload(count: results.count, faces: results)
                 ))
+
+            case .all:
+                // Run every analysis. Failures of individual analyses don't fail the file.
+                var ocrPayload: OCRPayload? = nil
+                var classifyPayload: ClassificationPayload? = nil
+                var barcodesPayload: BarcodesPayload? = nil
+                var facesPayload: FacesPayload? = nil
+
+                do {
+                    var ocrLines: [String]
+                    if PDFDetect.isPDF(at: url) {
+                        let cfg = PDFProcessor.Configuration(dpi: pdfDPI, preferEmbedded: preferEmbedded)
+                        ocrLines = try Analyzer.recognizeTextInPDF(at: url, config: cfg, languages: languageHints, enhance: enhanceImages)
+                    } else {
+                        ocrLines = try Analyzer.recognizeText(at: url, languages: languageHints, enhance: enhanceImages)
+                    }
+                    if cleanText && !ocrLines.isEmpty {
+                        if #available(macOS 26.0, *) {
+                            let input = ocrLines
+                            do {
+                                ocrLines = try runAsync { try await Cleaner.clean(lines: input) }
+                            } catch {
+                                if !quietMode {
+                                    printStderr("warning: --clean skipped: \(error.localizedDescription)")
+                                }
+                            }
+                        }
+                    }
+                    ocrPayload = OCRPayload(text: ocrLines.joined(separator: "\n"), lines: ocrLines)
+                } catch {
+                    if !quietMode {
+                        printStderr("warning: ocr failed for \(filePath): \(AugeError.classify(error).userMessage)")
+                    }
+                }
+
+                do {
+                    var c = try Analyzer.classifyImage(at: url)
+                    c = c.filter { $0.confidence >= minConfidence }
+                    if c.count > topN { c = Array(c.prefix(topN)) }
+                    classifyPayload = ClassificationPayload(classifications: c)
+                } catch {
+                    if !quietMode {
+                        printStderr("warning: classify failed for \(filePath): \(AugeError.classify(error).userMessage)")
+                    }
+                }
+
+                do {
+                    let b = try Analyzer.detectBarcodes(at: url)
+                    barcodesPayload = BarcodesPayload(barcodes: b)
+                } catch {
+                    if !quietMode {
+                        printStderr("warning: barcode failed for \(filePath): \(AugeError.classify(error).userMessage)")
+                    }
+                }
+
+                do {
+                    let f = try Analyzer.detectFaces(at: url)
+                    facesPayload = FacesPayload(count: f.count, faces: f)
+                } catch {
+                    if !quietMode {
+                        printStderr("warning: faces failed for \(filePath): \(AugeError.classify(error).userMessage)")
+                    }
+                }
+
+                outputResult(mode: "all", file: filePath, payload: .all(AllPayload(
+                    ocr: ocrPayload,
+                    classify: classifyPayload,
+                    barcodes: barcodesPayload,
+                    faces: facesPayload
+                )))
             }
         } catch {
             let classified = AugeError.classify(error)

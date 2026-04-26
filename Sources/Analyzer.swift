@@ -14,6 +14,7 @@ enum AnalysisMode: String, Sendable {
     case classify
     case barcode
     case faces
+    case all
 }
 
 // MARK: - Analyzer

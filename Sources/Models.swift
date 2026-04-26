@@ -28,6 +28,7 @@ enum ResultPayload: Encodable {
     case classification(ClassificationPayload)
     case barcodes(BarcodesPayload)
     case faces(FacesPayload)
+    case all(AllPayload)
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
@@ -36,6 +37,7 @@ enum ResultPayload: Encodable {
         case .classification(let p): try container.encode(p)
         case .barcodes(let p): try container.encode(p)
         case .faces(let p): try container.encode(p)
+        case .all(let p): try container.encode(p)
         }
     }
 }
@@ -56,4 +58,12 @@ struct BarcodesPayload: Encodable {
 struct FacesPayload: Encodable {
     let count: Int
     let faces: [FaceResult]
+}
+
+/// Combined payload for `--all` mode: every analysis bundled in one response.
+struct AllPayload: Encodable {
+    let ocr: OCRPayload?
+    let classify: ClassificationPayload?
+    let barcodes: BarcodesPayload?
+    let faces: FacesPayload?
 }
