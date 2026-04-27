@@ -466,10 +466,37 @@ for filePath in filePaths {
                              payload: .document(DocumentPayload(document: result)))
 
             case .all:
+                // --all means ALL: every capability auge supports runs here.
+                // Each is wrapped in its own do/catch so a single failure does
+                // not block the others. Failures surface as `null` in JSON
+                // and a stderr warning (unless --quiet).
+                func warnIfFailed(_ cap: String, _ error: Error) {
+                    if !quietMode {
+                        printStderr("warning: \(cap) failed for \(filePath): \(AugeError.classify(error).userMessage)")
+                    }
+                }
+
                 var ocrPayload: OCRPayload? = nil
                 var classifyPayload: ClassificationPayload? = nil
                 var barcodesPayload: BarcodesPayload? = nil
                 var facesPayload: FacesPayload? = nil
+                var faceLandmarksPayload: FaceLandmarksPayload? = nil
+                var faceQualityPayload: FaceQualityPayload? = nil
+                var humansPayload: HumansPayload? = nil
+                var textRectanglesPayload: TextRectanglesPayload? = nil
+                var rectanglesPayload: RectanglesPayload? = nil
+                var horizonPayload: HorizonPayload? = nil
+                var animalsPayload: AnimalsPayload? = nil
+                var animalPosePayload: AnimalPosePayload? = nil
+                var bodyPosePayload: BodyPosePayload? = nil
+                var handPosePayload: HandPosePayload? = nil
+                var saliencyAttentionPayload: SaliencyPayload? = nil
+                var saliencyObjectnessPayload: SaliencyPayload? = nil
+                var contoursPayload: ContoursPayload? = nil
+                var featurePrintPayload: FeaturePrintPayload? = nil
+                var aestheticsPayload: AestheticsPayload? = nil
+                var smudgePayload: SmudgePayload? = nil
+                var documentPayload: DocumentPayload? = nil
 
                 do {
                     var ocrLines: [String]
@@ -490,46 +517,132 @@ for filePath in filePaths {
                         }
                     }
                     ocrPayload = OCRPayload(text: ocrLines.joined(separator: "\n"), lines: ocrLines)
-                } catch {
-                    if !quietMode {
-                        printStderr("warning: ocr failed for \(filePath): \(AugeError.classify(error).userMessage)")
-                    }
-                }
+                } catch { warnIfFailed("ocr", error) }
 
                 do {
                     var c = try Analyzer.classifyImage(at: url)
                     c = c.filter { $0.confidence >= minConfidence }
                     if c.count > topN { c = Array(c.prefix(topN)) }
                     classifyPayload = ClassificationPayload(classifications: c)
-                } catch {
-                    if !quietMode {
-                        printStderr("warning: classify failed for \(filePath): \(AugeError.classify(error).userMessage)")
-                    }
-                }
+                } catch { warnIfFailed("classify", error) }
 
                 do {
                     let b = try Analyzer.detectBarcodes(at: url)
                     barcodesPayload = BarcodesPayload(barcodes: b)
-                } catch {
-                    if !quietMode {
-                        printStderr("warning: barcode failed for \(filePath): \(AugeError.classify(error).userMessage)")
-                    }
-                }
+                } catch { warnIfFailed("barcode", error) }
 
                 do {
                     let f = try Analyzer.detectFaces(at: url)
                     facesPayload = FacesPayload(count: f.count, faces: f)
-                } catch {
-                    if !quietMode {
-                        printStderr("warning: faces failed for \(filePath): \(AugeError.classify(error).userMessage)")
-                    }
-                }
+                } catch { warnIfFailed("faces", error) }
+
+                do {
+                    let r = try Analyzer.detectFaceLandmarks(at: url)
+                    faceLandmarksPayload = FaceLandmarksPayload(count: r.count, faces: r)
+                } catch { warnIfFailed("face-landmarks", error) }
+
+                do {
+                    let r = try Analyzer.detectFaceQuality(at: url)
+                    faceQualityPayload = FaceQualityPayload(count: r.count, faces: r)
+                } catch { warnIfFailed("face-quality", error) }
+
+                do {
+                    let r = try Analyzer.detectHumans(at: url, upperBodyOnly: upperBodyOnly)
+                    humansPayload = HumansPayload(count: r.count, humans: r)
+                } catch { warnIfFailed("humans", error) }
+
+                do {
+                    let r = try Analyzer.detectTextRectangles(at: url)
+                    textRectanglesPayload = TextRectanglesPayload(count: r.count, rectangles: r)
+                } catch { warnIfFailed("text-rectangles", error) }
+
+                do {
+                    let r = try Analyzer.detectRectangles(at: url)
+                    rectanglesPayload = RectanglesPayload(count: r.count, rectangles: r)
+                } catch { warnIfFailed("rectangles", error) }
+
+                do {
+                    let r = try Analyzer.detectHorizon(at: url)
+                    horizonPayload = HorizonPayload(horizon: r)
+                } catch { warnIfFailed("horizon", error) }
+
+                do {
+                    let r = try Analyzer.recognizeAnimals(at: url)
+                    animalsPayload = AnimalsPayload(count: r.count, animals: r)
+                } catch { warnIfFailed("animals", error) }
+
+                do {
+                    let r = try Analyzer.detectAnimalPose(at: url)
+                    animalPosePayload = AnimalPosePayload(count: r.count, animals: r)
+                } catch { warnIfFailed("animal-pose", error) }
+
+                do {
+                    let r = try Analyzer.detectBodyPose(at: url)
+                    bodyPosePayload = BodyPosePayload(count: r.count, bodies: r)
+                } catch { warnIfFailed("body-pose", error) }
+
+                do {
+                    let r = try Analyzer.detectHandPose(at: url, maximumHands: maxHands)
+                    handPosePayload = HandPosePayload(count: r.count, hands: r)
+                } catch { warnIfFailed("hand-pose", error) }
+
+                do {
+                    let r = try Analyzer.attentionSaliency(at: url)
+                    saliencyAttentionPayload = SaliencyPayload(count: r.count, regions: r)
+                } catch { warnIfFailed("saliency-attention", error) }
+
+                do {
+                    let r = try Analyzer.objectnessSaliency(at: url)
+                    saliencyObjectnessPayload = SaliencyPayload(count: r.count, regions: r)
+                } catch { warnIfFailed("saliency-objectness", error) }
+
+                do {
+                    let r = try Analyzer.detectContours(at: url)
+                    contoursPayload = ContoursPayload(contours: r)
+                } catch { warnIfFailed("contours", error) }
+
+                do {
+                    let (fp, _) = try Analyzer.featurePrint(at: url)
+                    featurePrintPayload = FeaturePrintPayload(featurePrint: fp)
+                } catch { warnIfFailed("feature-print", error) }
+
+                do {
+                    let r = try runAsync { try await TahoeAnalyzer.aesthetics(at: url) }
+                    aestheticsPayload = AestheticsPayload(aesthetics: r)
+                } catch { warnIfFailed("aesthetics", error) }
+
+                do {
+                    let r = try runAsync { try await TahoeAnalyzer.smudge(at: url) }
+                    smudgePayload = SmudgePayload(smudge: r)
+                } catch { warnIfFailed("smudge", error) }
+
+                do {
+                    let r = try runAsync { try await TahoeAnalyzer.document(at: url) }
+                    documentPayload = DocumentPayload(document: r)
+                } catch { warnIfFailed("document", error) }
 
                 outputResult(mode: "all", file: filePath, payload: .all(AllPayload(
                     ocr: ocrPayload,
                     classify: classifyPayload,
                     barcodes: barcodesPayload,
-                    faces: facesPayload
+                    faces: facesPayload,
+                    faceLandmarks: faceLandmarksPayload,
+                    faceQuality: faceQualityPayload,
+                    humans: humansPayload,
+                    textRectangles: textRectanglesPayload,
+                    rectangles: rectanglesPayload,
+                    horizon: horizonPayload,
+                    animals: animalsPayload,
+                    animalPose: animalPosePayload,
+                    bodyPose: bodyPosePayload,
+                    handPose: handPosePayload,
+                    saliencyAttention: saliencyAttentionPayload,
+                    saliencyObjectness: saliencyObjectnessPayload,
+                    contours: contoursPayload,
+                    featurePrint: featurePrintPayload,
+                    aesthetics: aestheticsPayload,
+                    smudge: smudgePayload,
+                    document: documentPayload
                 )))
             }
         } catch {

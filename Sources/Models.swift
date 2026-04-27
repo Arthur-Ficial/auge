@@ -187,9 +187,51 @@ struct DocumentPayload: Encodable {
 }
 
 /// Combined payload for `--all` mode: every analysis bundled in one response.
+/// Every capability is attempted; failures show up as `null` for that key.
 struct AllPayload: Encodable {
     let ocr: OCRPayload?
     let classify: ClassificationPayload?
     let barcodes: BarcodesPayload?
     let faces: FacesPayload?
+    let faceLandmarks: FaceLandmarksPayload?
+    let faceQuality: FaceQualityPayload?
+    let humans: HumansPayload?
+    let textRectangles: TextRectanglesPayload?
+    let rectangles: RectanglesPayload?
+    let horizon: HorizonPayload?
+    let animals: AnimalsPayload?
+    let animalPose: AnimalPosePayload?
+    let bodyPose: BodyPosePayload?
+    let handPose: HandPosePayload?
+    let saliencyAttention: SaliencyPayload?
+    let saliencyObjectness: SaliencyPayload?
+    let contours: ContoursPayload?
+    let featurePrint: FeaturePrintPayload?
+    let aesthetics: AestheticsPayload?
+    let smudge: SmudgePayload?
+    let document: DocumentPayload?
+
+    enum CodingKeys: String, CodingKey {
+        case ocr
+        case classify
+        case barcodes
+        case faces
+        case faceLandmarks      = "face_landmarks"
+        case faceQuality        = "face_quality"
+        case humans
+        case textRectangles     = "text_rectangles"
+        case rectangles
+        case horizon
+        case animals
+        case animalPose         = "animal_pose"
+        case bodyPose           = "body_pose"
+        case handPose           = "hand_pose"
+        case saliencyAttention  = "saliency_attention"
+        case saliencyObjectness = "saliency_objectness"
+        case contours
+        case featurePrint       = "feature_print"
+        case aesthetics
+        case smudge
+        case document
+    }
 }
