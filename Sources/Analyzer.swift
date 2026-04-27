@@ -80,6 +80,86 @@ enum Analyzer {
         return observations.compactMap { $0.topCandidates(1).first?.string }
     }
 
+    // MARK: OCR — detailed (per-line confidence + optional boxes + tunable knobs)
+
+    struct OCROptions: Sendable {
+        var languages: [String] = []
+        var autoDetectLanguage: Bool = false
+        var customWords: [String] = []
+        var useLanguageCorrection: Bool = true
+        var fast: Bool = false
+        var withBoxes: Bool = false
+        var enhance: Bool = false
+    }
+
+    static func recognizeTextDetailed(at url: URL, options: OCROptions) throws -> [OCRLineDetail] {
+        let image = try ImagePreprocessor.load(url: url, enhance: options.enhance)
+        return try recognizeTextDetailed(in: image, options: options)
+    }
+
+    static func recognizeTextDetailed(in image: CGImage, options: OCROptions) throws -> [OCRLineDetail] {
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = options.fast ? .fast : .accurate
+        request.usesLanguageCorrection = options.useLanguageCorrection
+        if !options.languages.isEmpty {
+            request.recognitionLanguages = options.languages
+        }
+        if options.autoDetectLanguage {
+            request.automaticallyDetectsLanguage = true
+        }
+        if !options.customWords.isEmpty {
+            request.customWords = options.customWords
+        }
+        try handler.perform([request])
+
+        guard let observations = request.results else { return [] }
+
+        return observations.compactMap { obs -> OCRLineDetail? in
+            guard let candidate = obs.topCandidates(1).first else { return nil }
+            let confidence = Double(candidate.confidence)
+            let box = obs.boundingBox
+            if options.withBoxes {
+                return OCRLineDetail(
+                    text: candidate.string,
+                    confidence: confidence,
+                    x: Double(box.origin.x),
+                    y: Double(box.origin.y),
+                    width: Double(box.size.width),
+                    height: Double(box.size.height)
+                )
+            } else {
+                return OCRLineDetail(text: candidate.string, confidence: confidence)
+            }
+        }
+    }
+
+    /// PDF-aware variant returning detailed line records across pages.
+    static func recognizeTextDetailedInPDF(
+        at url: URL,
+        config: PDFProcessor.Configuration,
+        options: OCROptions
+    ) throws -> [OCRLineDetail] {
+        let pages = try PDFProcessor.process(url: url, config: config)
+        var all: [OCRLineDetail] = []
+        for (index, page) in pages.enumerated() {
+            if index > 0 {
+                // Page separator marker: empty-text record with confidence 0
+                all.append(OCRLineDetail(text: "", confidence: 0))
+            }
+            switch page {
+            case .embeddedText(let text):
+                let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+                for l in lines { all.append(OCRLineDetail(text: l, confidence: 1.0)) }
+            case .rasterImage(let image):
+                let prepared = try ImagePreprocessor.apply(image, enhance: options.enhance)
+                let details = try recognizeTextDetailed(in: prepared, options: options)
+                all.append(contentsOf: details)
+            }
+        }
+        return all
+    }
+
     /// Process a PDF: extract embedded text where available, OCR rasterized pages otherwise.
     static func recognizeTextInPDF(
         at url: URL,

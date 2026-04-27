@@ -33,6 +33,24 @@ public struct FaceResult: Codable, Sendable {
     }
 }
 
+// MARK: - OCR rich line detail (optional, populated when richer flags are set)
+
+public struct OCRLineDetail: Codable, Sendable {
+    public let text: String
+    public let confidence: Double
+    public let x: Double?
+    public let y: Double?
+    public let width: Double?
+    public let height: Double?
+    public init(text: String, confidence: Double,
+                x: Double? = nil, y: Double? = nil,
+                width: Double? = nil, height: Double? = nil) {
+        self.text = text
+        self.confidence = confidence
+        self.x = x; self.y = y; self.width = width; self.height = height
+    }
+}
+
 // MARK: - Shared building blocks
 
 public struct PointResult: Codable, Sendable {

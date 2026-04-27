@@ -59,6 +59,11 @@ var enhanceImages: Bool = false
 var cleanText: Bool = false
 var upperBodyOnly: Bool = false
 var maxHands: Int = 2
+var autoDetectLanguage: Bool = false
+var ocrFast: Bool = false
+var ocrNoCorrect: Bool = false
+var ocrWithBoxes: Bool = false
+var ocrCustomWords: [String] = []
 
 var i = 0
 while i < args.count {
@@ -176,6 +181,36 @@ while i < args.count {
         }
         maxHands = n
 
+    case "--auto-lang":
+        autoDetectLanguage = true
+
+    case "--fast":
+        ocrFast = true
+
+    case "--no-correct":
+        ocrNoCorrect = true
+
+    case "--with-boxes":
+        ocrWithBoxes = true
+
+    case "--vocab":
+        i += 1
+        guard i < args.count else {
+            printError("--vocab requires a path to a words file (one per line)")
+            exit(exitUsageError)
+        }
+        do {
+            let url = URL(fileURLWithPath: args[i])
+            let raw = try String(contentsOf: url, encoding: .utf8)
+            ocrCustomWords = raw
+                .split(whereSeparator: { $0.isNewline })
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+        } catch {
+            printError("--vocab: could not read \(args[i]): \(error.localizedDescription)")
+            exit(exitUsageError)
+        }
+
     default:
         if args[i].hasPrefix("-") {
             printError("unknown option: \(args[i])")
@@ -261,18 +296,44 @@ for filePath in filePaths {
         do {
             switch analysisMode {
             case .ocr:
+                let useDetailedOCR = autoDetectLanguage || ocrFast || ocrNoCorrect || ocrWithBoxes || !ocrCustomWords.isEmpty
                 var lines: [String]
-                if PDFDetect.isPDF(at: url) {
-                    let cfg = PDFProcessor.Configuration(dpi: pdfDPI, preferEmbedded: preferEmbedded)
-                    lines = try Analyzer.recognizeTextInPDF(at: url, config: cfg, languages: languageHints, enhance: enhanceImages)
+                var details: [OCRLineDetail]? = nil
+
+                if useDetailedOCR {
+                    let opts = Analyzer.OCROptions(
+                        languages: languageHints,
+                        autoDetectLanguage: autoDetectLanguage,
+                        customWords: ocrCustomWords,
+                        useLanguageCorrection: !ocrNoCorrect,
+                        fast: ocrFast,
+                        withBoxes: ocrWithBoxes,
+                        enhance: enhanceImages
+                    )
+                    let detail: [OCRLineDetail]
+                    if PDFDetect.isPDF(at: url) {
+                        let cfg = PDFProcessor.Configuration(dpi: pdfDPI, preferEmbedded: preferEmbedded)
+                        detail = try Analyzer.recognizeTextDetailedInPDF(at: url, config: cfg, options: opts)
+                    } else {
+                        detail = try Analyzer.recognizeTextDetailed(at: url, options: opts)
+                    }
+                    lines = detail.map { $0.text }
+                    details = detail
                 } else {
-                    lines = try Analyzer.recognizeText(at: url, languages: languageHints, enhance: enhanceImages)
+                    if PDFDetect.isPDF(at: url) {
+                        let cfg = PDFProcessor.Configuration(dpi: pdfDPI, preferEmbedded: preferEmbedded)
+                        lines = try Analyzer.recognizeTextInPDF(at: url, config: cfg, languages: languageHints, enhance: enhanceImages)
+                    } else {
+                        lines = try Analyzer.recognizeText(at: url, languages: languageHints, enhance: enhanceImages)
+                    }
                 }
 
                 if cleanText && !lines.isEmpty {
                     let input = lines
                     do {
                         lines = try runAsync { try await Cleaner.clean(lines: input) }
+                        // Cleaner reflows; per-line metadata no longer matches.
+                        details = nil
                     } catch {
                         if !quietMode {
                             printStderr("warning: --clean skipped for \(filePath): \(error.localizedDescription)")
@@ -284,7 +345,9 @@ for filePath in filePaths {
                     if !quietMode { printStderr("No text detected in \(filePath)") }
                 } else {
                     outputResult(mode: "ocr", file: filePath, payload: .ocr(OCRPayload(
-                        text: lines.joined(separator: "\n"), lines: lines
+                        text: lines.joined(separator: "\n"),
+                        lines: lines,
+                        lineDetails: details
                     )))
                 }
 

@@ -86,6 +86,13 @@ enum ResultPayload: Encodable {
 struct OCRPayload: Encodable {
     let text: String
     let lines: [String]
+    let lineDetails: [OCRLineDetail]?
+
+    init(text: String, lines: [String], lineDetails: [OCRLineDetail]? = nil) {
+        self.text = text
+        self.lines = lines
+        self.lineDetails = lineDetails
+    }
 }
 
 struct ClassificationPayload: Encodable {

@@ -195,6 +195,11 @@ func printUsage() {
           --min-confidence <n>  Min confidence threshold 0-1 [default: 0.01]
           --upper-body-only     For --humans: detect upper body only
           --max-hands <n>       For --hand-pose: max hands [default: 2]
+          --auto-lang           OCR: auto-detect language (single pass, ignores --langs)
+          --fast                OCR: use fast recognition level (lower latency, less accuracy)
+          --no-correct          OCR: disable language correction (IDs, codes, plates)
+          --with-boxes          OCR: include per-line bounding boxes + confidence in JSON
+          --vocab <path>        OCR: custom words file (one word per line) for jargon
       -h, --help                Show this help
       -v, --version             Print version
           --release             Show detailed release and build info
