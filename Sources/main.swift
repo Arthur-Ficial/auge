@@ -19,14 +19,9 @@ let exitRuntimeError: Int32 = 1
 let exitUsageError: Int32 = 2
 let exitVisionUnavailable: Int32 = 5
 
-/// Map an AugeError to the appropriate exit code.
-func exitCode(for error: AugeError) -> Int32 {
-    return error.exitCode
-}
+func exitCode(for error: AugeError) -> Int32 { return error.exitCode }
 
 // MARK: - Network Guard
-// Hard-block any HTTP/HTTPS/WS/WSS request inside the process. auge is on-device only.
-
 NetworkGuard.install()
 
 // MARK: - Signal Handling
@@ -43,12 +38,9 @@ signal(SIGINT) { _ in
 
 var args = Array(CommandLine.arguments.dropFirst())
 
-// No args → print usage
 if args.isEmpty {
-    // Check for stdin pipe with no args
     if isatty(STDIN_FILENO) == 0 {
-        // Piped data but no mode — can't determine what to do
-        printError("no analysis mode specified. Use --ocr, --classify, --barcode, or --faces")
+        printError("no analysis mode specified.")
         exit(exitUsageError)
     }
     printUsage()
@@ -65,6 +57,8 @@ var preferEmbedded: Bool = true
 var languageHints: [String] = []
 var enhanceImages: Bool = false
 var cleanText: Bool = false
+var upperBodyOnly: Bool = false
+var maxHands: Int = 2
 
 var i = 0
 while i < args.count {
@@ -93,41 +87,38 @@ while i < args.count {
         }
         outputFormat = fmt
 
-    case "--plain":
-        outputFormat = .plain
+    case "--plain": outputFormat = .plain
+    case "--md":    outputFormat = .md
+    case "--json":  outputFormat = .json
+    case "--ndjson": outputFormat = .ndjson
+    case "--compact": compactMode = true
+    case "-q", "--quiet": quietMode = true
+    case "--no-color": noColorFlag = true
 
-    case "--md":
-        outputFormat = .md
-
-    case "--json":
-        outputFormat = .json
-
-    case "--ndjson":
-        outputFormat = .ndjson
-
-    case "--compact":
-        compactMode = true
-
-    case "-q", "--quiet":
-        quietMode = true
-
-    case "--no-color":
-        noColorFlag = true
-
-    case "--ocr":
-        mode = .ocr
-
-    case "--classify":
-        mode = .classify
-
-    case "--barcode":
-        mode = .barcode
-
-    case "--faces":
-        mode = .faces
-
-    case "--all":
-        mode = .all
+    // Capability flags
+    case "--ocr":                  mode = .ocr
+    case "--classify":             mode = .classify
+    case "--barcode":              mode = .barcode
+    case "--faces":                mode = .faces
+    case "--face-landmarks":       mode = .faceLandmarks
+    case "--face-quality":         mode = .faceQuality
+    case "--humans":               mode = .humans
+    case "--text-rectangles":      mode = .textRectangles
+    case "--rectangles":           mode = .rectangles
+    case "--horizon":              mode = .horizon
+    case "--animals":              mode = .animals
+    case "--animal-pose":          mode = .animalPose
+    case "--body-pose":            mode = .bodyPose
+    case "--hand-pose":            mode = .handPose
+    case "--saliency-attention":   mode = .saliencyAttention
+    case "--saliency-objectness":  mode = .saliencyObjectness
+    case "--contours":             mode = .contours
+    case "--feature-print":        mode = .featurePrint
+    case "--compare":              mode = .compare
+    case "--aesthetics":           mode = .aesthetics
+    case "--smudge":               mode = .smudge
+    case "--document":             mode = .document
+    case "--all":                  mode = .all
 
     case "--clipboard":
         useClipboard = true
@@ -140,11 +131,8 @@ while i < args.count {
         }
         pdfDPI = n
 
-    case "--prefer-embedded":
-        preferEmbedded = true
-
-    case "--no-prefer-embedded":
-        preferEmbedded = false
+    case "--prefer-embedded":     preferEmbedded = true
+    case "--no-prefer-embedded":  preferEmbedded = false
 
     case "--langs":
         i += 1
@@ -158,11 +146,8 @@ while i < args.count {
             exit(exitUsageError)
         }
 
-    case "--enhance":
-        enhanceImages = true
-
-    case "--clean":
-        cleanText = true
+    case "--enhance": enhanceImages = true
+    case "--clean":   cleanText = true
 
     case "--top":
         i += 1
@@ -180,19 +165,28 @@ while i < args.count {
         }
         minConfidence = c
 
+    case "--upper-body-only":
+        upperBodyOnly = true
+
+    case "--max-hands":
+        i += 1
+        guard i < args.count, let n = Int(args[i]), n > 0, n <= 4 else {
+            printError("--max-hands requires a number between 1 and 4")
+            exit(exitUsageError)
+        }
+        maxHands = n
+
     default:
         if args[i].hasPrefix("-") {
             printError("unknown option: \(args[i])")
             exit(exitUsageError)
         }
-        // Everything else is a file path
         filePaths.append(args[i])
     }
     i += 1
 }
 
-// --clipboard: read pasteboard image, write to temp file, treat as input.
-// Cannot be combined with file paths. When set, stdin is not consulted for paths.
+// --clipboard input
 if useClipboard {
     if !filePaths.isEmpty {
         printError("--clipboard cannot be combined with file paths")
@@ -210,25 +204,47 @@ if useClipboard {
         exit(classified.exitCode)
     }
 } else if isatty(STDIN_FILENO) == 0 && filePaths.isEmpty {
-    // Read file paths from stdin if piped (no --clipboard)
     while let line = readLine() {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            filePaths.append(trimmed)
-        }
+        if !trimmed.isEmpty { filePaths.append(trimmed) }
     }
 }
 
-// Validate: must have a mode
 guard let analysisMode = mode else {
-    printError("no analysis mode specified. Use --ocr, --classify, --barcode, or --faces")
+    printError("no analysis mode specified. See --help.")
     exit(exitUsageError)
 }
 
-// Validate: must have at least one file
 guard !filePaths.isEmpty else {
     printError("no input file specified")
     exit(exitUsageError)
+}
+
+// MARK: - --compare special case (two files in, single result out)
+
+if analysisMode == .compare {
+    guard filePaths.count == 2 else {
+        printError("--compare requires exactly two image paths")
+        exit(exitUsageError)
+    }
+    let a = filePaths[0]
+    let b = filePaths[1]
+    switch (ImageSource.validatePath(a), ImageSource.validatePath(b)) {
+    case (.failure(let e), _), (_, .failure(let e)):
+        printError("\(e.cliLabel) \(e.userMessage)")
+        exit(e.exitCode)
+    case (.success(let urlA), .success(let urlB)):
+        do {
+            let result = try Analyzer.compareImages(urlA, urlB)
+            outputResult(mode: "compare", file: "\(a) vs \(b)",
+                         payload: .compare(ComparePayload(compare: result)))
+            exit(exitSuccess)
+        } catch {
+            let classified = AugeError.classify(error)
+            printError("\(classified.cliLabel) \(classified.userMessage)")
+            exit(classified.exitCode)
+        }
+    }
 }
 
 // MARK: - Dispatch
@@ -236,7 +252,6 @@ guard !filePaths.isEmpty else {
 var hasError = false
 
 for filePath in filePaths {
-    // Validate the file path
     switch ImageSource.validatePath(filePath) {
     case .failure(let error):
         printError("\(error.cliLabel) \(error.userMessage)")
@@ -255,68 +270,139 @@ for filePath in filePaths {
                 }
 
                 if cleanText && !lines.isEmpty {
-                    if #available(macOS 26.0, *) {
-                        let input = lines
-                        do {
-                            lines = try runAsync { try await Cleaner.clean(lines: input) }
-                        } catch {
-                            if !quietMode {
-                                printStderr("warning: --clean skipped for \(filePath): \(error.localizedDescription)")
-                            }
+                    let input = lines
+                    do {
+                        lines = try runAsync { try await Cleaner.clean(lines: input) }
+                    } catch {
+                        if !quietMode {
+                            printStderr("warning: --clean skipped for \(filePath): \(error.localizedDescription)")
                         }
-                    } else {
-                        printError("--clean requires macOS 26 (Tahoe) — FoundationModels is unavailable on this OS")
-                        exit(exitRuntimeError)
                     }
                 }
 
                 if lines.isEmpty {
-                    if !quietMode {
-                        printStderr("No text detected in \(filePath)")
-                    }
+                    if !quietMode { printStderr("No text detected in \(filePath)") }
                 } else {
                     outputResult(mode: "ocr", file: filePath, payload: .ocr(OCRPayload(
-                        text: lines.joined(separator: "\n"),
-                        lines: lines
+                        text: lines.joined(separator: "\n"), lines: lines
                     )))
                 }
 
             case .classify:
                 var results = try Analyzer.classifyImage(at: url)
                 results = results.filter { $0.confidence >= minConfidence }
-                if results.count > topN {
-                    results = Array(results.prefix(topN))
-                }
+                if results.count > topN { results = Array(results.prefix(topN)) }
                 if results.isEmpty {
-                    if !quietMode {
-                        printStderr("No classifications detected in \(filePath)")
-                    }
+                    if !quietMode { printStderr("No classifications detected in \(filePath)") }
                 } else {
-                    outputResult(mode: "classify", file: filePath, payload: .classification(
-                        ClassificationPayload(classifications: results)
-                    ))
+                    outputResult(mode: "classify", file: filePath,
+                                 payload: .classification(ClassificationPayload(classifications: results)))
                 }
 
             case .barcode:
                 let results = try Analyzer.detectBarcodes(at: url)
                 if results.isEmpty {
-                    if !quietMode {
-                        printStderr("No barcodes detected in \(filePath)")
-                    }
+                    if !quietMode { printStderr("No barcodes detected in \(filePath)") }
                 } else {
-                    outputResult(mode: "barcode", file: filePath, payload: .barcodes(
-                        BarcodesPayload(barcodes: results)
-                    ))
+                    outputResult(mode: "barcode", file: filePath,
+                                 payload: .barcodes(BarcodesPayload(barcodes: results)))
                 }
 
             case .faces:
                 let results = try Analyzer.detectFaces(at: url)
-                outputResult(mode: "faces", file: filePath, payload: .faces(
-                    FacesPayload(count: results.count, faces: results)
-                ))
+                outputResult(mode: "faces", file: filePath,
+                             payload: .faces(FacesPayload(count: results.count, faces: results)))
+
+            case .faceLandmarks:
+                let results = try Analyzer.detectFaceLandmarks(at: url)
+                outputResult(mode: "face-landmarks", file: filePath,
+                             payload: .faceLandmarks(FaceLandmarksPayload(count: results.count, faces: results)))
+
+            case .faceQuality:
+                let results = try Analyzer.detectFaceQuality(at: url)
+                outputResult(mode: "face-quality", file: filePath,
+                             payload: .faceQuality(FaceQualityPayload(count: results.count, faces: results)))
+
+            case .humans:
+                let results = try Analyzer.detectHumans(at: url, upperBodyOnly: upperBodyOnly)
+                outputResult(mode: "humans", file: filePath,
+                             payload: .humans(HumansPayload(count: results.count, humans: results)))
+
+            case .textRectangles:
+                let results = try Analyzer.detectTextRectangles(at: url)
+                outputResult(mode: "text-rectangles", file: filePath,
+                             payload: .textRectangles(TextRectanglesPayload(count: results.count, rectangles: results)))
+
+            case .rectangles:
+                let results = try Analyzer.detectRectangles(at: url)
+                outputResult(mode: "rectangles", file: filePath,
+                             payload: .rectangles(RectanglesPayload(count: results.count, rectangles: results)))
+
+            case .horizon:
+                let result = try Analyzer.detectHorizon(at: url)
+                outputResult(mode: "horizon", file: filePath,
+                             payload: .horizon(HorizonPayload(horizon: result)))
+
+            case .animals:
+                let results = try Analyzer.recognizeAnimals(at: url)
+                outputResult(mode: "animals", file: filePath,
+                             payload: .animals(AnimalsPayload(count: results.count, animals: results)))
+
+            case .animalPose:
+                let results = try Analyzer.detectAnimalPose(at: url)
+                outputResult(mode: "animal-pose", file: filePath,
+                             payload: .animalPose(AnimalPosePayload(count: results.count, animals: results)))
+
+            case .bodyPose:
+                let results = try Analyzer.detectBodyPose(at: url)
+                outputResult(mode: "body-pose", file: filePath,
+                             payload: .bodyPose(BodyPosePayload(count: results.count, bodies: results)))
+
+            case .handPose:
+                let results = try Analyzer.detectHandPose(at: url, maximumHands: maxHands)
+                outputResult(mode: "hand-pose", file: filePath,
+                             payload: .handPose(HandPosePayload(count: results.count, hands: results)))
+
+            case .saliencyAttention:
+                let results = try Analyzer.attentionSaliency(at: url)
+                outputResult(mode: "saliency-attention", file: filePath,
+                             payload: .saliencyAttention(SaliencyPayload(count: results.count, regions: results)))
+
+            case .saliencyObjectness:
+                let results = try Analyzer.objectnessSaliency(at: url)
+                outputResult(mode: "saliency-objectness", file: filePath,
+                             payload: .saliencyObjectness(SaliencyPayload(count: results.count, regions: results)))
+
+            case .contours:
+                let result = try Analyzer.detectContours(at: url)
+                outputResult(mode: "contours", file: filePath,
+                             payload: .contours(ContoursPayload(contours: result)))
+
+            case .featurePrint:
+                let (fp, _) = try Analyzer.featurePrint(at: url)
+                outputResult(mode: "feature-print", file: filePath,
+                             payload: .featurePrint(FeaturePrintPayload(featurePrint: fp)))
+
+            case .compare:
+                // Handled above via early-return.
+                break
+
+            case .aesthetics:
+                let result = try runAsync { try await TahoeAnalyzer.aesthetics(at: url) }
+                outputResult(mode: "aesthetics", file: filePath,
+                             payload: .aesthetics(AestheticsPayload(aesthetics: result)))
+
+            case .smudge:
+                let result = try runAsync { try await TahoeAnalyzer.smudge(at: url) }
+                outputResult(mode: "smudge", file: filePath,
+                             payload: .smudge(SmudgePayload(smudge: result)))
+
+            case .document:
+                let result = try runAsync { try await TahoeAnalyzer.document(at: url) }
+                outputResult(mode: "document", file: filePath,
+                             payload: .document(DocumentPayload(document: result)))
 
             case .all:
-                // Run every analysis. Failures of individual analyses don't fail the file.
                 var ocrPayload: OCRPayload? = nil
                 var classifyPayload: ClassificationPayload? = nil
                 var barcodesPayload: BarcodesPayload? = nil
@@ -331,14 +417,12 @@ for filePath in filePaths {
                         ocrLines = try Analyzer.recognizeText(at: url, languages: languageHints, enhance: enhanceImages)
                     }
                     if cleanText && !ocrLines.isEmpty {
-                        if #available(macOS 26.0, *) {
-                            let input = ocrLines
-                            do {
-                                ocrLines = try runAsync { try await Cleaner.clean(lines: input) }
-                            } catch {
-                                if !quietMode {
-                                    printStderr("warning: --clean skipped: \(error.localizedDescription)")
-                                }
+                        let input = ocrLines
+                        do {
+                            ocrLines = try runAsync { try await Cleaner.clean(lines: input) }
+                        } catch {
+                            if !quietMode {
+                                printStderr("warning: --clean skipped: \(error.localizedDescription)")
                             }
                         }
                     }

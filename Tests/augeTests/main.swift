@@ -61,6 +61,7 @@ suite("LanguageHintsTests") { runLanguageHintsTests() }
 suite("ImageSizePolicyTests") { runImageSizePolicyTests() }
 suite("CleanChunkerTests") { runCleanChunkerTests() }
 suite("LineMergerTests") { runLineMergerTests() }
+suite("NewCapabilityFormatterTests") { runNewCapabilityFormatterTests() }
 
 // MARK: - Summary
 

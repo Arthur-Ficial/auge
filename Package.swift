@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "auge",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS(.v26)],
     targets: [
         // Pure-logic library — no Vision, testable
         .target(

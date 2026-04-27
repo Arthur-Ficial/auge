@@ -8,7 +8,6 @@
 import Foundation
 import AugeCore
 
-@available(macOS 26.0, *)
 enum Cleaner {
     private static let instructions = """
     Clean OCR text only.
