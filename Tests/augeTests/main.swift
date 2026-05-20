@@ -62,6 +62,7 @@ suite("ImageSizePolicyTests") { runImageSizePolicyTests() }
 suite("CleanChunkerTests") { runCleanChunkerTests() }
 suite("LineMergerTests") { runLineMergerTests() }
 suite("NewCapabilityFormatterTests") { runNewCapabilityFormatterTests() }
+suite("MCPServerTests") { runMCPServerTests() }
 
 // MARK: - Summary
 

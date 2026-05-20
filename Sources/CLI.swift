@@ -13,15 +13,15 @@ let augeSchemaVersion = "1"
 
 /// Output an analysis result in the configured format.
 func outputResult(mode: String, file: String, payload: ResultPayload) {
-    switch outputFormat {
+    print(renderedResult(mode: mode, file: file, payload: payload, format: outputFormat, compact: compactMode))
+}
+
+func renderedResult(mode: String, file: String, payload: ResultPayload, format: OutputFormat, compact: Bool = false) -> String {
+    switch format {
     case .plain:
-        let text = plainTextFor(payload: payload)
-        print(text)
-
+        return plainTextFor(payload: payload)
     case .md:
-        let text = markdownFor(payload: payload)
-        print(text)
-
+        return markdownFor(payload: payload)
     case .json:
         let response = AugeResponse(
             mode: mode,
@@ -29,8 +29,7 @@ func outputResult(mode: String, file: String, payload: ResultPayload) {
             results: payload,
             metadata: .init(onDevice: true, version: version, schema: augeSchemaVersion)
         )
-        print(jsonString(response, pretty: !compactMode))
-
+        return jsonString(response, pretty: !compact)
     case .ndjson:
         let response = AugeResponse(
             mode: mode,
@@ -38,11 +37,11 @@ func outputResult(mode: String, file: String, payload: ResultPayload) {
             results: payload,
             metadata: .init(onDevice: true, version: version, schema: augeSchemaVersion)
         )
-        print(jsonString(response, pretty: false))
+        return jsonString(response, pretty: false)
     }
 }
 
-private func plainTextFor(payload: ResultPayload) -> String {
+func plainTextFor(payload: ResultPayload) -> String {
     switch payload {
     case .ocr(let p):                return p.text
     case .classification(let p):     return ResultFormatter.formatClassification(p.classifications)
@@ -75,7 +74,7 @@ private func plainTextFor(payload: ResultPayload) -> String {
     }
 }
 
-private func markdownFor(payload: ResultPayload) -> String {
+func markdownFor(payload: ResultPayload) -> String {
     switch payload {
     case .ocr(let p):                return ResultFormatter.markdownOCR(p.lines)
     case .classification(let p):     return ResultFormatter.markdownClassification(p.classifications)
