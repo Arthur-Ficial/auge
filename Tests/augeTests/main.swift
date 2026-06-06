@@ -65,6 +65,7 @@ suite("NewCapabilityFormatterTests") { runNewCapabilityFormatterTests() }
 suite("MaskAnalysisTests") { runMaskAnalysisTests() }
 suite("CoreMLResultTests") { runCoreMLResultTests() }
 suite("VideoHelpersTests") { runVideoHelpersTests() }
+suite("MCPServerTests") { runMCPServerTests() }
 
 // MARK: - Summary
 

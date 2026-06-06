@@ -15,15 +15,15 @@ let augeSchemaVersion = "2"
 
 /// Output an analysis result in the configured format.
 func outputResult(mode: String, file: String, payload: ResultPayload) {
-    switch outputFormat {
+    print(renderedResult(mode: mode, file: file, payload: payload, format: outputFormat, compact: compactMode))
+}
+
+func renderedResult(mode: String, file: String, payload: ResultPayload, format: OutputFormat, compact: Bool = false) -> String {
+    switch format {
     case .plain:
-        let text = plainTextFor(payload: payload)
-        print(text)
-
+        return plainTextFor(payload: payload)
     case .md:
-        let text = markdownFor(payload: payload)
-        print(text)
-
+        return markdownFor(payload: payload)
     case .json:
         let response = AugeResponse(
             mode: mode,
@@ -31,8 +31,7 @@ func outputResult(mode: String, file: String, payload: ResultPayload) {
             results: payload,
             metadata: .init(onDevice: true, version: version, schema: augeSchemaVersion)
         )
-        print(jsonString(response, pretty: !compactMode))
-
+        return jsonString(response, pretty: !compact)
     case .ndjson:
         let response = AugeResponse(
             mode: mode,
@@ -40,7 +39,7 @@ func outputResult(mode: String, file: String, payload: ResultPayload) {
             results: payload,
             metadata: .init(onDevice: true, version: version, schema: augeSchemaVersion)
         )
-        print(jsonString(response, pretty: false))
+        return jsonString(response, pretty: false)
     }
 }
 
@@ -113,7 +112,7 @@ private func plainAll(_ p: AllPayload) -> String {
     return s.isEmpty ? "(no results across any mode)" : s.joined(separator: "\n\n")
 }
 
-private func markdownAll(_ p: AllPayload) -> String {
+func markdownAll(_ p: AllPayload) -> String {
     var s: [String] = []
     func add(_ title: String, _ body: String) {
         s.append("## \(title)\n\n" + body)

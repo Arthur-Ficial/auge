@@ -12,19 +12,35 @@ let package = Package(
             dependencies: [],
             path: "Sources/Core"
         ),
-        // Main executable — depends on AugeCore + Vision framework
-        .executableTarget(
-            name: "auge",
+        // Shared app logic — Vision integration, CLI runtime, MCP runtime
+        .target(
+            name: "AugeApp",
             dependencies: [
                 "AugeCore",
             ],
             path: "Sources",
-            exclude: ["Core"]
+            exclude: ["Core", "CLIApp", "MCPApp", "main.swift"]
+        ),
+        // Main executable — thin entrypoint over AugeApp
+        .executableTarget(
+            name: "auge",
+            dependencies: [
+                "AugeApp",
+            ],
+            path: "Sources/CLIApp"
+        ),
+        // Local MCP stdio server — thin entrypoint over AugeApp
+        .executableTarget(
+            name: "auge-mcp",
+            dependencies: [
+                "AugeApp",
+            ],
+            path: "Sources/MCPApp"
         ),
         // Test runner — pure Swift, no XCTest/Testing (Command Line Tools only)
         .executableTarget(
             name: "auge-tests",
-            dependencies: ["AugeCore"],
+            dependencies: ["AugeCore", "AugeApp"],
             path: "Tests/augeTests"
         ),
     ]

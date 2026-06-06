@@ -13,7 +13,7 @@ import AugeCore
 
 // MARK: - Analysis Mode
 
-enum AnalysisMode: String, Sendable {
+package enum AnalysisMode: String, Sendable {
     case ocr
     case classify
     case barcode
