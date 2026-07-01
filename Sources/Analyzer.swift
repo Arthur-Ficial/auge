@@ -10,6 +10,8 @@ import CoreML
 import CoreImage
 import AVFoundation
 import AugeCore
+import LesbarCore
+import Lesbar
 
 // MARK: - Analysis Mode
 
@@ -50,100 +52,30 @@ enum AnalysisMode: String, Sendable {
 // MARK: - Analyzer
 
 enum Analyzer {
-    // MARK: OCR
+    // MARK: OCR (delegated to lesbar — the shared Vision/PDFKit extractor)
+    //
+    // The battle-proven OCR/PDF stack now lives in the `lesbar` package so auge and
+    // apfel share one implementation instead of duplicating ~1700 lines. These wrappers
+    // keep auge's exact public signatures and error taxonomy: lesbar's `LesbarError` is
+    // mapped back to `AugeError` so exit codes, cliLabels, and userMessages are identical.
 
-    /// Perform OCR on an image at the given URL.
-    /// - Parameters:
-    ///   - languages: BCP-47 hints in priority order (e.g. ["en-US", "de-DE"]). Empty = no hint.
-    ///   - enhance: When true, upscale tiny images before OCR (helps small text).
+    /// Tunable knobs for detailed OCR. Aliased to lesbar's pure type; defaults match.
+    typealias OCROptions = LesbarCore.OCROptions
+
     static func recognizeText(at url: URL, languages: [String] = [], enhance: Bool = false) throws -> [String] {
-        let image = try ImagePreprocessor.load(url: url, enhance: enhance)
-        return try recognizeText(in: image, languages: languages)
+        try mapLesbarError { try OCR.recognizeText(at: url, languages: languages, enhance: enhance) }
     }
 
-    /// Perform OCR on a CGImage. Multi-language inputs run one pass per language and merge.
-    /// Vision's recognizer biases to the first listed language and silently skips other scripts
-    /// on multi-script inputs — multi-pass+merge is the only way to catch every script asked for.
     static func recognizeText(in image: CGImage, languages: [String] = []) throws -> [String] {
-        if languages.count <= 1 {
-            return try recognizeTextSinglePass(in: image, languages: languages)
-        }
-        var runs: [[String]] = []
-        runs.reserveCapacity(languages.count)
-        for lang in languages {
-            let lines = try recognizeTextSinglePass(in: image, languages: [lang])
-            runs.append(lines)
-        }
-        return LineMerger.merge(runs)
-    }
-
-    private static func recognizeTextSinglePass(in image: CGImage, languages: [String]) throws -> [String] {
-        let handler = VNImageRequestHandler(cgImage: image, options: [:])
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        if !languages.isEmpty {
-            request.recognitionLanguages = languages
-        }
-        try handler.perform([request])
-
-        guard let observations = request.results else {
-            return []
-        }
-        return observations.compactMap { $0.topCandidates(1).first?.string }
-    }
-
-    // MARK: OCR — detailed (per-line confidence + optional boxes + tunable knobs)
-
-    struct OCROptions: Sendable {
-        var languages: [String] = []
-        var autoDetectLanguage: Bool = false
-        var customWords: [String] = []
-        var useLanguageCorrection: Bool = true
-        var fast: Bool = false
-        var withBoxes: Bool = false
-        var enhance: Bool = false
+        try mapLesbarError { try OCR.recognizeText(in: image, languages: languages) }
     }
 
     static func recognizeTextDetailed(at url: URL, options: OCROptions) throws -> [OCRLineDetail] {
-        let image = try ImagePreprocessor.load(url: url, enhance: options.enhance)
-        return try recognizeTextDetailed(in: image, options: options)
+        try mapLesbarError { try OCR.recognizeTextDetailed(at: url, options: options) }
     }
 
     static func recognizeTextDetailed(in image: CGImage, options: OCROptions) throws -> [OCRLineDetail] {
-        let handler = VNImageRequestHandler(cgImage: image, options: [:])
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = options.fast ? .fast : .accurate
-        request.usesLanguageCorrection = options.useLanguageCorrection
-        if !options.languages.isEmpty {
-            request.recognitionLanguages = options.languages
-        }
-        if options.autoDetectLanguage {
-            request.automaticallyDetectsLanguage = true
-        }
-        if !options.customWords.isEmpty {
-            request.customWords = options.customWords
-        }
-        try handler.perform([request])
-
-        guard let observations = request.results else { return [] }
-
-        return observations.compactMap { obs -> OCRLineDetail? in
-            guard let candidate = obs.topCandidates(1).first else { return nil }
-            let confidence = Double(candidate.confidence)
-            let box = obs.boundingBox
-            if options.withBoxes {
-                return OCRLineDetail(
-                    text: candidate.string,
-                    confidence: confidence,
-                    x: Double(box.origin.x),
-                    y: Double(box.origin.y),
-                    width: Double(box.size.width),
-                    height: Double(box.size.height)
-                )
-            } else {
-                return OCRLineDetail(text: candidate.string, confidence: confidence)
-            }
-        }
+        try mapLesbarError { try OCR.recognizeTextDetailed(in: image, options: options) }
     }
 
     /// PDF-aware variant returning detailed line records across pages.
@@ -152,24 +84,7 @@ enum Analyzer {
         config: PDFProcessor.Configuration,
         options: OCROptions
     ) throws -> [OCRLineDetail] {
-        let pages = try PDFProcessor.process(url: url, config: config)
-        var all: [OCRLineDetail] = []
-        for (index, page) in pages.enumerated() {
-            if index > 0 {
-                // Page separator marker: empty-text record with confidence 0
-                all.append(OCRLineDetail(text: "", confidence: 0))
-            }
-            switch page {
-            case .embeddedText(let text):
-                let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-                for l in lines { all.append(OCRLineDetail(text: l, confidence: 1.0)) }
-            case .rasterImage(let image):
-                let prepared = try ImagePreprocessor.apply(image, enhance: options.enhance)
-                let details = try recognizeTextDetailed(in: prepared, options: options)
-                all.append(contentsOf: details)
-            }
-        }
-        return all
+        try mapLesbarError { try OCR.recognizeTextDetailedInPDF(at: url, config: config, options: options) }
     }
 
     /// Process a PDF: extract embedded text where available, OCR rasterized pages otherwise.
@@ -179,23 +94,25 @@ enum Analyzer {
         languages: [String] = [],
         enhance: Bool = false
     ) throws -> [String] {
-        let pages = try PDFProcessor.process(url: url, config: config)
-        var allLines: [String] = []
-        for (index, page) in pages.enumerated() {
-            if index > 0 { allLines.append("") }
-            switch page {
-            case .embeddedText(let text):
-                let lines = text
-                    .split(separator: "\n", omittingEmptySubsequences: false)
-                    .map(String.init)
-                allLines.append(contentsOf: lines)
-            case .rasterImage(let image):
-                let prepared = try ImagePreprocessor.apply(image, enhance: enhance)
-                let lines = try recognizeText(in: prepared, languages: languages)
-                allLines.append(contentsOf: lines)
+        try mapLesbarError { try OCR.recognizeTextInPDF(at: url, config: config, languages: languages, enhance: enhance) }
+    }
+
+    /// Run a lesbar extraction call, translating `LesbarError` back into the matching
+    /// `AugeError` so auge's error reporting (cliLabel / exitCode / userMessage) is exactly
+    /// what it was before the migration. Non-lesbar errors propagate untouched to
+    /// `AugeError.classify` in main.
+    private static func mapLesbarError<T>(_ body: () throws -> T) throws -> T {
+        do { return try body() }
+        catch let e as LesbarError {
+            switch e {
+            case .fileNotFound(let p):      throw AugeError.fileNotFound(p)
+            case .unreadable:               throw AugeError.invalidImage
+            case .unsupportedFormat(let f): throw AugeError.unsupportedFormat(f)
+            case .visionUnavailable:        throw AugeError.visionUnavailable
+            case .noTextFound:              throw AugeError.noTextFound
+            case .unknown(let m):           throw AugeError.unknown(m)
             }
         }
-        return allLines
     }
 
     // MARK: Classify

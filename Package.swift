@@ -5,18 +5,29 @@ import PackageDescription
 let package = Package(
     name: "auge",
     platforms: [.macOS(.v26)],
+    dependencies: [
+        // auge consumes lesbar for its Vision OCR + PDFKit file->text stack, so the
+        // extractor is maintained once (also consumed by apfel -f). Local path during
+        // development; the release build pins a tagged version (see docs/release).
+        .package(path: "../lesbar"),
+    ],
     targets: [
-        // Pure-logic library — no Vision, testable
+        // Pure-logic library — no Vision, testable. Depends on LesbarCore for the
+        // shared pure OCR types/policies (aliased in LesbarAliases.swift).
         .target(
             name: "AugeCore",
-            dependencies: [],
+            dependencies: [
+                .product(name: "LesbarCore", package: "lesbar"),
+            ],
             path: "Sources/Core"
         ),
-        // Main executable — depends on AugeCore + Vision framework
+        // Main executable — AugeCore + Vision framework + lesbar's OCR/PDF extractor.
         .executableTarget(
             name: "auge",
             dependencies: [
                 "AugeCore",
+                .product(name: "Lesbar", package: "lesbar"),
+                .product(name: "LesbarCore", package: "lesbar"),
             ],
             path: "Sources",
             exclude: ["Core"]

@@ -6,6 +6,7 @@
 import Foundation
 import Vision
 import AugeCore
+import Lesbar
 
 enum TahoeAnalyzer {
     // MARK: --aesthetics (macOS 15+, WWDC24)
