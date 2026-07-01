@@ -7,9 +7,8 @@ let package = Package(
     platforms: [.macOS(.v26)],
     dependencies: [
         // auge consumes lesbar for its Vision OCR + PDFKit file->text stack, so the
-        // extractor is maintained once (also consumed by apfel -f). Local path during
-        // development; the release build pins a tagged version (see docs/release).
-        .package(path: "../lesbar"),
+        // extractor is maintained once (also consumed by apfel -f).
+        .package(url: "https://github.com/Arthur-Ficial/lesbar.git", from: "0.2.1"),
     ],
     targets: [
         // Pure-logic library — no Vision, testable. Depends on LesbarCore for the

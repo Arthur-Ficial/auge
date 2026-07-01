@@ -1,0 +1,15 @@
+{
+  "originHash" : "4e932f21c80668c5365cd0bacc72e727d0bffff6a3bc85a8d2bce431cbb9f19d",
+  "pins" : [
+    {
+      "identity" : "lesbar",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Arthur-Ficial/lesbar.git",
+      "state" : {
+        "revision" : "d17aa883f03746f4674ef1b59459ead70a8893d9",
+        "version" : "0.2.1"
+      }
+    }
+  ],
+  "version" : 3
+}
